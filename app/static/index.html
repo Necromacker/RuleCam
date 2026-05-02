@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VideoDB Explorer</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>VideoDB Explorer</h1>
+            <p class="subtitle">See, Understand, and Act on your videos</p>
+        </header>
+
+        <section class="card">
+            <h3>Upload New Video</h3>
+            <div class="input-group">
+                <input type="text" id="videoUrl" placeholder="Enter video URL (YouTube, MP4, etc.)">
+                <button id="uploadBtn">Upload</button>
+            </div>
+        </section>
+
+        <section class="card" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(16, 185, 129, 0.1)); border: 1px solid var(--primary);">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <span style="font-size: 1.5rem;">🏢</span>
+                <h3 style="margin: 0;">Brand Studio (AI Scraper)</h3>
+            </div>
+            <p class="subtitle" style="margin-bottom: 20px;">Enter a cafe or business name to scrape their Google Maps photos and generate a professional brand reel.</p>
+            
+            <div id="step1">
+                <div class="input-group">
+                    <input type="text" id="brandQuery" placeholder="Enter brand name (e.g. 'Starbucks Seattle')">
+                    <button id="fetchMediaBtn">Fetch Brand Media</button>
+                </div>
+            </div>
+
+            <div id="step2" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h4 id="foundBrandName">Found: Brand Name</h4>
+                    <button id="restartBtn" class="secondary" style="padding: 4px 12px; font-size: 0.8rem;">Change Brand</button>
+                </div>
+                <div id="mediaGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 20px;"></div>
+                
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">Step 3: Add a Style Sample (YouTube URL)</label>
+                    <input type="text" id="sampleUrl" placeholder="Paste a professional reel URL for style/audio" style="width: 100%;">
+                </div>
+
+                <button id="brandReelBtn" style="background: var(--accent); width: 100%;">Create Remixed Reel</button>
+            </div>
+        </section>
+
+        <section id="videosSection">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Your Videos</h2>
+                <button id="refreshBtn" class="secondary">Refresh</button>
+            </div>
+            <div id="videoList" class="video-list">
+                <!-- Videos will be injected here -->
+            </div>
+        </section>
+
+        <section id="playerSection" class="player-container card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 id="nowPlayingTitle">Now Playing</h3>
+                <button id="closePlayer" class="secondary">Close Player</button>
+            </div>
+            <iframe id="videoPlayer" src="" frameborder="0" allowfullscreen></iframe>
+            
+            <div class="search-section">
+                <h4>Search inside video</h4>
+                <div class="input-group">
+                    <input type="text" id="searchQuery" placeholder="What are you looking for?">
+                    <button id="searchBtn">Search</button>
+                </div>
+                <div id="searchResults" class="results-list"></div>
+            </div>
+
+            <div style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 20px;">
+                <button id="subtitlesBtn" class="secondary">Generate Subtitles</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3>Generate New Media</h3>
+            <p class="subtitle" style="margin-bottom: 16px;">Create AI-powered images and video from prompts</p>
+            <div class="input-group">
+                <input type="text" id="genPrompt" placeholder="Describe the video or image you want to generate...">
+                <button id="genVideoBtn">Gen Video</button>
+                <button id="genImageBtn" class="secondary">Gen Image</button>
+            </div>
+            <div id="genResults" style="margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px;"></div>
+        </section>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
