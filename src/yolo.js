@@ -7,8 +7,12 @@ export const loadModel = async () => {
   if (session) return true;
   try {
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
-    session = await ort.InferenceSession.create('/models/yolov8n.onnx', { executionProviders: ['wasm'] });
-    console.log("ONNX Model loaded!");
+    ort.env.wasm.numThreads = 1; 
+    // Try WebGL first for GPU acceleration, fallback to WASM
+    session = await ort.InferenceSession.create('/models/yolov8n.onnx', { 
+      executionProviders: ['webgl', 'wasm'] 
+    });
+    console.log("ONNX Model loaded with WebGL/WASM!");
     return true;
   } catch (e) {
     console.error("Failed to load ONNX model", e);
@@ -19,11 +23,24 @@ export const loadModel = async () => {
 export const detectObjects = async (canvas, videoElement) => {
   if (!session) return [];
   
-  // Resize to 640x640
+  // Resize to 640x640 using letterboxing (preserve aspect ratio)
   const width = 640;
   const height = 640;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(videoElement, 0, 0, width, height);
+  
+  const vWidth = videoElement.videoWidth;
+  const vHeight = videoElement.videoHeight;
+  const scale = Math.min(width / vWidth, height / vHeight);
+  const newWidth = vWidth * scale;
+  const newHeight = vHeight * scale;
+  const dx = (width - newWidth) / 2;
+  const dy = (height - newHeight) / 2;
+
+  // YOLO expects padding to be 114 (gray)
+  ctx.fillStyle = 'rgb(114, 114, 114)';
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(videoElement, dx, dy, newWidth, newHeight);
+  
   const imgData = ctx.getImageData(0, 0, width, height);
   const data = imgData.data;
 
@@ -46,10 +63,6 @@ export const detectObjects = async (canvas, videoElement) => {
     const numBoxes = 8400;
     const detections = [];
 
-    // Precalculate for scaling back to original video dimensions
-    const scaleX = videoElement.videoWidth / width;
-    const scaleY = videoElement.videoHeight / height;
-
     for (let i = 0; i < numBoxes; i++) {
       let maxScore = 0;
       let classId = -1;
@@ -62,16 +75,23 @@ export const detectObjects = async (canvas, videoElement) => {
         }
       }
 
-      if (maxScore > 0.4) {
+      // Slightly lower threshold for recall, precision handles it later
+      if (maxScore > 0.3) {
         const cx = output[0 * numBoxes + i];
         const cy = output[1 * numBoxes + i];
         const w = output[2 * numBoxes + i];
         const h = output[3 * numBoxes + i];
 
-        const x1 = (cx - w / 2) * scaleX;
-        const y1 = (cy - h / 2) * scaleY;
-        const x2 = (cx + w / 2) * scaleX;
-        const y2 = (cy + h / 2) * scaleY;
+        // Remove padding and scale back to original video size
+        const original_cx = (cx - dx) / scale;
+        const original_cy = (cy - dy) / scale;
+        const original_w = w / scale;
+        const original_h = h / scale;
+
+        const x1 = original_cx - original_w / 2;
+        const y1 = original_cy - original_h / 2;
+        const x2 = original_cx + original_w / 2;
+        const y2 = original_cy + original_h / 2;
 
         detections.push({
           bbox: [x1, y1, x2, y2],
