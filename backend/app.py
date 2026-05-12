@@ -388,5 +388,5 @@ def clear_violations():
 
 if __name__ == "__main__":
     print("RuleCam YOLO Backend starting...")
-    print("Detection endpoint: http://localhost:5005/detect")
-    app.run(host="0.0.0.0", port=5005, debug=True)
+    port = int(os.environ.get("PORT", 5005))
+    app.run(host="0.0.0.0", port=port, debug=False)
