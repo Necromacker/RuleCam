@@ -1,8 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-from ultralytics import YOLO
-import cv2
-import numpy as np
 import sqlite3
 import os
 from datetime import datetime
