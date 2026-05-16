@@ -60,7 +60,6 @@ def init_db():
     conn.close()
 
 init_db()
-model = YOLO("yolov8n.pt")
 
 def clip_video_opencv(file_path, start_sec, duration, out_path):
     """Clip a video segment using OpenCV (no ffmpeg needed)."""
@@ -90,8 +89,7 @@ def clip_video_opencv(file_path, start_sec, duration, out_path):
 
 def yolo_extract_violation_clip(file_path, v_type):
     """Extract violation clips from video. For Manual uploads, just clips first 10s."""
-    
-    
+    model = YOLO("yolov8n.pt")
     cap = cv2.VideoCapture(file_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     if fps <= 0: fps = 30
@@ -235,8 +233,30 @@ def process_videodb_workflow(file_path, record_id):
 
     with videodb_lock:
         try:
-            update_progress(record_id, "Analyzing video using YOLO to find potential violations...")
-            clips = yolo_extract_violation_clip(file_path, v_type)
+            hf_api_url = os.getenv("HF_API_URL")
+            if hf_api_url:
+                update_progress(record_id, "Sending video to AI Inference API for YOLO analysis...")
+                import requests
+                try:
+                    with open(file_path, 'rb') as f:
+                        resp = requests.post(hf_api_url, files={"video": f}, data={"v_type": v_type})
+                    if resp.status_code == 200:
+                        encoded_clips = resp.json().get("clips", [])
+                        clips = []
+                        for idx, enc in enumerate(encoded_clips):
+                            out_path = os.path.join(VIOLATIONS_DIR, f"hf_clip_{record_id}_{idx}.mp4")
+                            with open(out_path, "wb") as f_out:
+                                f_out.write(base64.b64decode(enc))
+                            clips.append(out_path)
+                    else:
+                        update_progress(record_id, f"HF API Error: {resp.status_code}")
+                        clips = []
+                except Exception as e:
+                    update_progress(record_id, f"HF API Connection Error: {e}")
+                    clips = []
+            else:
+                update_progress(record_id, "Analyzing video using YOLO to find potential violations...")
+                clips = yolo_extract_violation_clip(file_path, v_type)
             
             if not clips:
                 update_progress(record_id, "No violations detected by YOLO.")
