@@ -205,6 +205,7 @@ const App = () => {
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(err => console.log("Camera play error:", err));
       }
       setError(null);
     } catch (err) {
