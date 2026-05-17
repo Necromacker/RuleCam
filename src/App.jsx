@@ -548,6 +548,28 @@ const App = () => {
     }
   };
 
+  // Auto-start scanning loop on mount and whenever video source changes
+  useEffect(() => {
+    // 1. Clean up any existing timeouts first to prevent duplicate loops
+    isMonitoringSignalRef.current = false;
+    isMonitoringTripleRef.current = false;
+    if (loopTimeoutRef.current) {
+      clearTimeout(loopTimeoutRef.current);
+    }
+
+    // 2. Set monitoring to true
+    setIsMonitoringSignal(true);
+    isMonitoringSignalRef.current = true;
+
+    // 3. Start the frame capture analysis loop
+    captureAndDetectSignalLoop();
+
+    // 4. If an uploaded video is loaded, force it to play immediately
+    if (uploadedVideoUrl && videoRef.current) {
+      videoRef.current.play().catch(err => console.log("[Auto-Start] Video play error:", err));
+    }
+  }, [uploadedVideoUrl, captureAndDetectSignalLoop]);
+
   const toggleSignalMonitoring = () => {
     if (isMonitoringSignalRef.current) {
       isMonitoringSignalRef.current = false;
@@ -931,28 +953,7 @@ const App = () => {
                 )}
               </div>
 
-              <div className="action-buttons">
-                <div className="action-row">
-                  <button
-                    className={`card-btn ${isMonitoringSignal ? 'active' : ''}`}
-                    onClick={toggleSignalMonitoring}
-                  >
-                    {uploadedVideoUrl 
-                      ? (isMonitoringSignal ? 'Stop Scan' : 'Scan Signal Violations')
-                      : (isMonitoringSignal ? 'Stop Signal' : 'Start Signal')
-                    }
-                  </button>
-                  <button
-                    className={`card-btn ${isMonitoringTriple ? 'active' : ''}`}
-                    onClick={toggleTripleMonitoring}
-                  >
-                    {uploadedVideoUrl
-                      ? (isMonitoringTriple ? 'Stop Scan' : 'Scan Triple Riding')
-                      : (isMonitoringTriple ? 'Stop Triple' : 'Start Triple')
-                    }
-                  </button>
-                </div>
-              </div>
+
             </div>
 
             <div className="chatbot-section">
