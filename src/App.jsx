@@ -207,6 +207,7 @@ const App = () => {
       // Load and play the uploaded video file
       if (videoRef.current) {
         videoRef.current.src = uploadedVideoUrl;
+        videoRef.current.load(); // Force the browser to load the new video stream
         videoRef.current.loop = true;
         videoRef.current.muted = true;
         videoRef.current.playsInline = true;
@@ -216,6 +217,7 @@ const App = () => {
       // Clear video element source and start webcam
       if (videoRef.current) {
         videoRef.current.src = "";
+        videoRef.current.load(); // Cleanly unload the video blob URL
       }
       startVideo();
     }
