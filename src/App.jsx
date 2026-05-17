@@ -602,16 +602,22 @@ const App = () => {
       clearTimeout(loopTimeoutRef.current);
     }
 
-    // 2. Set monitoring to true
-    setIsMonitoringSignal(true);
-    isMonitoringSignalRef.current = true;
+    if (uploadedVideoUrl) {
+      // 2. Set monitoring to true for uploaded videos
+      setIsMonitoringSignal(true);
+      isMonitoringSignalRef.current = true;
 
-    // 3. Start the frame capture analysis loop
-    captureAndDetectSignalLoop();
+      // 3. Start the frame capture analysis loop
+      captureAndDetectSignalLoop();
 
-    // 4. If an uploaded video is loaded, force it to play immediately
-    if (uploadedVideoUrl && videoRef.current) {
-      videoRef.current.play().catch(err => console.log("[Auto-Start] Video play error:", err));
+      // 4. If an uploaded video is loaded, force it to play immediately
+      if (videoRef.current) {
+        videoRef.current.play().catch(err => console.log("[Auto-Start] Video play error:", err));
+      }
+    } else {
+      // For webcam mode: Reset scanning states to inactive so the user can start manually!
+      setIsMonitoringSignal(false);
+      setIsMonitoringTriple(false);
     }
   }, [uploadedVideoUrl, captureAndDetectSignalLoop]);
 
@@ -1002,58 +1008,59 @@ const App = () => {
               </div>
 
               <div className="action-buttons" style={{ marginTop: '20px' }}>
-                <div className="action-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                  <button
-                    className={`card-btn ${isMonitoringSignal ? 'active' : ''}`}
-                    onClick={() => {
-                      if (isMonitoringTripleRef.current) {
-                        toggleTripleMonitoring();
-                      }
-                      if (!isMonitoringSignalRef.current) {
-                        toggleSignalMonitoring();
-                      }
-                    }}
-                    style={{ 
-                      background: isMonitoringSignal ? 'rgba(0, 240, 255, 0.12)' : 'rgba(255,255,255,0.03)',
-                      borderColor: isMonitoringSignal ? 'var(--teal)' : 'rgba(255,255,255,0.1)',
-                      color: isMonitoringSignal ? 'var(--teal)' : 'rgba(255,255,255,0.6)',
-                      fontWeight: '600',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      borderWidth: '1.5px',
-                      borderStyle: 'solid'
-                    }}
-                  >
-                    🚦 Monitor Signal Jumping
-                  </button>
-                  <button
-                    className={`card-btn ${isMonitoringTriple ? 'active' : ''}`}
-                    onClick={() => {
-                      if (isMonitoringSignalRef.current) {
-                        toggleSignalMonitoring();
-                      }
-                      if (!isMonitoringTripleRef.current) {
-                        toggleTripleMonitoring();
-                      }
-                    }}
-                    style={{ 
-                      background: isMonitoringTriple ? 'rgba(0, 240, 255, 0.12)' : 'rgba(255,255,255,0.03)',
-                      borderColor: isMonitoringTriple ? 'var(--teal)' : 'rgba(255,255,255,0.1)',
-                      color: isMonitoringTriple ? 'var(--teal)' : 'rgba(255,255,255,0.6)',
-                      fontWeight: '600',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      borderWidth: '1.5px',
-                      borderStyle: 'solid'
-                    }}
-                  >
-                    🏍️ Monitor Triple Riding
-                  </button>
-                </div>
+                {uploadedVideoUrl ? (
+                  <div className="automated-scan-status" style={{
+                    textAlign: 'center',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    background: 'rgba(0, 240, 255, 0.05)',
+                    border: '1.5px solid rgba(0, 240, 255, 0.15)',
+                    color: 'var(--teal)',
+                    fontWeight: '600',
+                    letterSpacing: '0.5px'
+                  }}>
+                    🤖 Automated AI Rule Scanning Active...
+                  </div>
+                ) : (
+                  <div className="action-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                    <button
+                      className={`card-btn ${isMonitoringSignal ? 'active' : ''}`}
+                      onClick={toggleSignalMonitoring}
+                      style={{ 
+                        background: isMonitoringSignal ? 'rgba(255, 75, 75, 0.15)' : 'rgba(255,255,255,0.03)',
+                        borderColor: isMonitoringSignal ? '#ff4b4b' : 'rgba(255,255,255,0.1)',
+                        color: isMonitoringSignal ? '#ff4b4b' : 'rgba(255,255,255,0.6)',
+                        fontWeight: '600',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        borderWidth: '1.5px',
+                        borderStyle: 'solid'
+                      }}
+                    >
+                      {isMonitoringSignal ? '🛑 Stop Signal Scan' : '🚦 Start Signal Scan'}
+                    </button>
+                    <button
+                      className={`card-btn ${isMonitoringTriple ? 'active' : ''}`}
+                      onClick={toggleTripleMonitoring}
+                      style={{ 
+                        background: isMonitoringTriple ? 'rgba(255, 75, 75, 0.15)' : 'rgba(255,255,255,0.03)',
+                        borderColor: isMonitoringTriple ? '#ff4b4b' : 'rgba(255,255,255,0.1)',
+                        color: isMonitoringTriple ? '#ff4b4b' : 'rgba(255,255,255,0.6)',
+                        fontWeight: '600',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        borderWidth: '1.5px',
+                        borderStyle: 'solid'
+                      }}
+                    >
+                      {isMonitoringTriple ? '🛑 Stop Triple Scan' : '🏍️ Start Triple Scan'}
+                    </button>
+                  </div>
+                )}
               </div>
 
             </div>
