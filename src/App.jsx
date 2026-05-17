@@ -834,7 +834,6 @@ const App = () => {
               </div>
             </div>
           </div>
-        </div>
 
         <div className="live-container" style={{ display: activeTab === 'live' ? 'grid' : 'none' }}>
             <div className="live-left">
@@ -956,7 +955,6 @@ const App = () => {
               </div>
             </div>
           </div>
-        </div>
 
         <div className="history-container" style={{ display: activeTab === 'history' ? 'flex' : 'none' }}>
             <div className="controls-bar">
@@ -1063,8 +1061,7 @@ const App = () => {
               )}
             </div>
           </div>
-        </div>
-      </main>
+        </main>
     </div>
   );
 };
