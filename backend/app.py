@@ -43,7 +43,8 @@ def detect_signal():
             return jsonify({"error": "HF_API_URL not configured"}), 500
             
         import requests
-        resp = requests.post(f"{hf_api_url.rstrip('/')}/detect_signal", json={"image": data.get("image", "")})
+        hf_base = hf_api_url.rstrip('/').removesuffix('/analyze')
+        resp = requests.post(f"{hf_base}/detect_signal", json={"image": data.get("image", "")})
         if resp.status_code == 200:
             return jsonify(resp.json())
         else:
@@ -61,7 +62,8 @@ def detect_triple():
             return jsonify({"error": "HF_API_URL not configured"}), 500
             
         import requests
-        resp = requests.post(f"{hf_api_url.rstrip('/')}/detect_triple", json={"image": data.get("image", "")})
+        hf_base = hf_api_url.rstrip('/').removesuffix('/analyze')
+        resp = requests.post(f"{hf_base}/detect_triple", json={"image": data.get("image", "")})
         if resp.status_code == 200:
             return jsonify(resp.json())
         else:
