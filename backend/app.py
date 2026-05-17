@@ -5,14 +5,8 @@ import os
 from datetime import datetime
 import threading
 import time
-import videodb
-from videodb import SceneExtractionType
-from videodb.editor import Timeline, Track, Clip, VideoAsset
 from dotenv import load_dotenv
 import base64
-import cv2
-import numpy as np
-from ultralytics import YOLO
 
 load_dotenv()
 
@@ -97,10 +91,6 @@ def init_db():
 
 init_db()
 
-def extract_fallback_clip(file_path):
-    pass
-
-
 def update_progress(record_id, text):
     try:
         conn_db = sqlite3.connect(DB_PATH)
@@ -131,6 +121,9 @@ def process_videodb_workflow(file_path, record_id):
 
     with videodb_lock:
         try:
+            import videodb
+            from videodb import SceneExtractionType
+            from videodb.editor import Timeline, Track, Clip, VideoAsset
             hf_api_url = os.getenv("HF_API_URL")
             if hf_api_url:
                 update_progress(record_id, "Sending video to AI Inference API for YOLO analysis...")
@@ -308,6 +301,7 @@ def chat_with_video():
     if not video_id or not question:
         return jsonify({"error": "Missing video_id or question"}), 400
     try:
+        import videodb
         conn = videodb.connect(api_key=VIDEODB_API_KEY)
         coll = conn.get_collection()
         
