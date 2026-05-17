@@ -1,5 +1,6 @@
 import * as React from 'react';
 import './App.css';
+import rulecamDemoVideo from './assets/Rulecam_demo.mp4';
 const { useEffect, useRef, useState, useCallback } = React;
 
 const rawBackendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5005";
@@ -833,7 +834,7 @@ const App = () => {
                   controls
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                 >
-                  <source src="./System_demo.mp4" type="video/mp4" />
+                  <source src={rulecamDemoVideo} type="video/mp4" />
                   Your browser does not support the video tag.
                 </video>
               </div>
