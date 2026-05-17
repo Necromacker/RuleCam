@@ -4,3 +4,5 @@ requests
 videodb
 python-dotenv
 gunicorn
+opencv-python-headless
+ultralytics
