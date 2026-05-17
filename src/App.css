@@ -704,6 +704,22 @@
   box-shadow: 2px 2px 0px var(--border-color);
 }
 
+.hero-cta-group {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .hero-cta-group {
+    justify-content: center;
+  }
+}
+
+.hero-cta.docs {
+  background: var(--orange);
+}
+
 .hero-visual {
   flex: 0.8;
   width: 100%;

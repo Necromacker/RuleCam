@@ -813,20 +813,31 @@ const App = () => {
                 <p className="hero-description">
                   RuleCam leverages state-of-the-art YOLOv8 object detection and VideoDB LLM-powered context analysis to detect traffic violations in real-time. Start monitoring or test immediately using our pre-recorded demo video!
                 </p>
-                <a href="/demo_traffic.mp4" download="demo_traffic.mp4" className="hero-cta">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  Download Demo Video
-                </a>
-              </div>
-              <div className="hero-visual placeholder-visual">
-                <div className="grid-overlay"></div>
-                <div className="scanner-line"></div>
-                <div className="placeholder-content">
-                  <div className="placeholder-radar"></div>
-                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" strokeWidth="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-                  <h3>AI Engine Active</h3>
-                  <p>Upload video files or stream live feeds to scan traffic rules.</p>
+                <div className="hero-cta-group">
+                  <a href="/demo_traffic.mp4" download="demo_traffic.mp4" className="hero-cta">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    Download Demo Video
+                  </a>
+                  <a href="/RuleCam_Documentation.pdf" download="RuleCam_Documentation.pdf" className="hero-cta docs">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    Download Documentation
+                  </a>
                 </div>
+              </div>
+              <div className="hero-visual" style={{ position: 'relative' }}>
+                <video 
+                  src="/System_demo.mp4" 
+                  autoPlay 
+                  loop 
+                  muted 
+                  playsInline 
+                  controls
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+                <span className="hero-badge status" style={{ position: 'absolute', top: '12px', left: '12px', zIndex: 10, background: 'var(--red-badge)', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', padding: '4px 12px' }}>
+                  <span className="live-dot" style={{ display: 'inline-block', width: '6px', height: '6px', background: 'white', borderRadius: '50%', animation: 'pulse-detect 1s infinite' }}></span>
+                  SYSTEM DEMO
+                </span>
               </div>
             </div>
 
