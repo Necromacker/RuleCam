@@ -16,6 +16,14 @@ from ultralytics import YOLO
 
 load_dotenv()
 
+print("Loading YOLO model globally...")
+try:
+    global_model = YOLO("yolov8n.pt")
+except Exception as e:
+    print("Failed to load YOLO model:", e)
+    global_model = None
+
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
@@ -55,8 +63,10 @@ def detect_signal():
             return jsonify({"error": "Failed to decode image"}), 400
         h, w = frame.shape[:2]
         
-        model = YOLO("yolov8n.pt")
-        results = model(frame, imgsz=320, verbose=False)
+        if global_model is None:
+            return jsonify({"error": "Model not loaded"}), 500
+        
+        results = global_model(frame, imgsz=320, verbose=False)
         
         detections = []
         light_state = "unknown"
@@ -64,7 +74,7 @@ def detect_signal():
         
         for r in results:
             for box in r.boxes:
-                cls_name = model.names[int(box.cls[0])]
+                cls_name = global_model.names[int(box.cls[0])]
                 bx1, by1, bx2, by2 = map(int, box.xyxy[0].tolist())
                 conf = float(box.conf[0])
                 
@@ -124,8 +134,10 @@ def detect_triple():
             return jsonify({"error": "Failed to decode image"}), 400
         h, w = frame.shape[:2]
         
-        model = YOLO("yolov8n.pt")
-        results = model(frame, imgsz=320, verbose=False)
+        if global_model is None:
+            return jsonify({"error": "Model not loaded"}), 500
+            
+        results = global_model(frame, imgsz=320, verbose=False)
         
         detections = []
         persons = []
@@ -133,7 +145,7 @@ def detect_triple():
         
         for r in results:
             for box in r.boxes:
-                cls_name = model.names[int(box.cls[0])]
+                cls_name = global_model.names[int(box.cls[0])]
                 bx1, by1, bx2, by2 = map(int, box.xyxy[0].tolist())
                 conf = float(box.conf[0])
                 
