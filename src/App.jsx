@@ -450,19 +450,65 @@ const App = () => {
 
   const captureAndDetectSignalLoop = useCallback(async () => {
     if (!isMonitoringSignalRef.current) return;
-    await captureAndDetectSignal();
-    if (isMonitoringSignalRef.current) {
-      loopTimeoutRef.current = setTimeout(captureAndDetectSignalLoop, 0);
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (uploadedVideoUrl) {
+      // 1. High-Speed Time-Skipping scanner for Custom Video Uploads!
+      if (video.readyState >= 2) {
+        await captureAndDetectSignal();
+        const nextTime = video.currentTime + 0.8;
+        if (nextTime < video.duration) {
+          video.currentTime = nextTime;
+          // Short seek buffer (150ms) to allow the browser to decode and draw the jumped frame
+          loopTimeoutRef.current = setTimeout(captureAndDetectSignalLoop, 150);
+        } else {
+          console.log("[Scanner] High-speed video rule scan complete!");
+          setIsMonitoringSignal(false);
+          isMonitoringSignalRef.current = false;
+        }
+      } else {
+        // Video buffered tracks are not fully loaded, retry seek in 100ms
+        loopTimeoutRef.current = setTimeout(captureAndDetectSignalLoop, 100);
+      }
+    } else {
+      // 2. Real-time Live Camera feed scanner
+      await captureAndDetectSignal();
+      if (isMonitoringSignalRef.current) {
+        loopTimeoutRef.current = setTimeout(captureAndDetectSignalLoop, 0);
+      }
     }
-  }, [captureAndDetectSignal]);
+  }, [captureAndDetectSignal, uploadedVideoUrl]);
 
   const captureAndDetectTripleLoop = useCallback(async () => {
     if (!isMonitoringTripleRef.current) return;
-    await captureAndDetectTriple();
-    if (isMonitoringTripleRef.current) {
-      loopTimeoutRef.current = setTimeout(captureAndDetectTripleLoop, 0);
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (uploadedVideoUrl) {
+      // 1. High-Speed Time-Skipping scanner for Custom Video Uploads!
+      if (video.readyState >= 2) {
+        await captureAndDetectTriple();
+        const nextTime = video.currentTime + 0.8;
+        if (nextTime < video.duration) {
+          video.currentTime = nextTime;
+          loopTimeoutRef.current = setTimeout(captureAndDetectTripleLoop, 150);
+        } else {
+          console.log("[Scanner] High-speed video triple scan complete!");
+          setIsMonitoringTriple(false);
+          isMonitoringTripleRef.current = false;
+        }
+      } else {
+        loopTimeoutRef.current = setTimeout(captureAndDetectTripleLoop, 100);
+      }
+    } else {
+      // 2. Real-time Live Camera feed scanner
+      await captureAndDetectTriple();
+      if (isMonitoringTripleRef.current) {
+        loopTimeoutRef.current = setTimeout(captureAndDetectTripleLoop, 0);
+      }
     }
-  }, [captureAndDetectTriple]);
+  }, [captureAndDetectTriple, uploadedVideoUrl]);
 
   // Start recording a clip
   const startRecording = useCallback(() => {
@@ -610,9 +656,10 @@ const App = () => {
       // 3. Start the frame capture analysis loop
       captureAndDetectSignalLoop();
 
-      // 4. If an uploaded video is loaded, force it to play immediately
+      // 4. Force video to remain paused and start from 0.0s for seek scanning
       if (videoRef.current) {
-        videoRef.current.play().catch(err => console.log("[Auto-Start] Video play error:", err));
+        videoRef.current.pause();
+        videoRef.current.currentTime = 0;
       }
     } else {
       // For webcam mode: Reset scanning states to inactive so the user can start manually!
@@ -934,15 +981,6 @@ const App = () => {
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 7 16 12 23 17 23 7"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
                     <span><strong>Test Video Loaded:</strong> {uploadedVideoName || "Custom Video"}</span>
                   </div>
-                  <button className="banner-clear-btn" onClick={() => {
-                    setUploadedVideoUrl(null);
-                    setUploadedVideoName(null);
-                    setRawVideoFile(null);
-                    if (isMonitoringSignalRef.current) toggleSignalMonitoring();
-                    if (isMonitoringTripleRef.current) toggleTripleMonitoring();
-                  }}>
-                    Switch to Live Camera
-                  </button>
                 </div>
               ) : (
                 <div 
@@ -988,13 +1026,13 @@ const App = () => {
                   style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
                 />
 
-                {isMonitoringSignal && (
+                {isMonitoringSignal && !uploadedVideoUrl && (
                   <div className="light-indicator">
                     {lightState.toUpperCase()} SIGNAL
                   </div>
                 )}
 
-                {(isMonitoringSignal || isMonitoringTriple) && (
+                {(isMonitoringSignal || isMonitoringTriple) && !uploadedVideoUrl && (
                   <div className="stats-overlay">
                     FPS {fps}
                   </div>
@@ -1007,57 +1045,36 @@ const App = () => {
                 )}
               </div>
 
-              <div className="action-buttons" style={{ marginTop: '20px' }}>
+              <div className="action-buttons">
                 {uploadedVideoUrl ? (
-                  <div className="automated-scan-status" style={{
-                    textAlign: 'center',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    background: 'rgba(0, 240, 255, 0.05)',
-                    border: '1.5px solid rgba(0, 240, 255, 0.15)',
-                    color: 'var(--teal)',
-                    fontWeight: '600',
-                    letterSpacing: '0.5px'
-                  }}>
-                    🤖 Automated AI Rule Scanning Active...
+                  <div className="action-row">
+                    <button
+                      className="card-btn"
+                      onClick={() => {
+                        setUploadedVideoUrl(null);
+                        setUploadedVideoName(null);
+                        setRawVideoFile(null);
+                        if (isMonitoringSignalRef.current) toggleSignalMonitoring();
+                        if (isMonitoringTripleRef.current) toggleTripleMonitoring();
+                      }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                    >
+                      📺 Switch to Live Camera
+                    </button>
                   </div>
                 ) : (
-                  <div className="action-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div className="action-row">
                     <button
                       className={`card-btn ${isMonitoringSignal ? 'active' : ''}`}
                       onClick={toggleSignalMonitoring}
-                      style={{ 
-                        background: isMonitoringSignal ? 'rgba(255, 75, 75, 0.15)' : 'rgba(255,255,255,0.03)',
-                        borderColor: isMonitoringSignal ? '#ff4b4b' : 'rgba(255,255,255,0.1)',
-                        color: isMonitoringSignal ? '#ff4b4b' : 'rgba(255,255,255,0.6)',
-                        fontWeight: '600',
-                        padding: '12px',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        borderWidth: '1.5px',
-                        borderStyle: 'solid'
-                      }}
                     >
-                      {isMonitoringSignal ? '🛑 Stop Signal Scan' : '🚦 Start Signal Scan'}
+                      {isMonitoringSignal ? 'Stop Signal' : 'Start Signal'}
                     </button>
                     <button
                       className={`card-btn ${isMonitoringTriple ? 'active' : ''}`}
                       onClick={toggleTripleMonitoring}
-                      style={{ 
-                        background: isMonitoringTriple ? 'rgba(255, 75, 75, 0.15)' : 'rgba(255,255,255,0.03)',
-                        borderColor: isMonitoringTriple ? '#ff4b4b' : 'rgba(255,255,255,0.1)',
-                        color: isMonitoringTriple ? '#ff4b4b' : 'rgba(255,255,255,0.6)',
-                        fontWeight: '600',
-                        padding: '12px',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        borderWidth: '1.5px',
-                        borderStyle: 'solid'
-                      }}
                     >
-                      {isMonitoringTriple ? '🛑 Stop Triple Scan' : '🏍️ Start Triple Scan'}
+                      {isMonitoringTriple ? 'Stop Triple' : 'Start Triple'}
                     </button>
                   </div>
                 )}
