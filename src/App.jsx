@@ -208,7 +208,7 @@ const App = () => {
       if (videoRef.current) {
         videoRef.current.src = uploadedVideoUrl;
         videoRef.current.load(); // Force the browser to load the new video stream
-        videoRef.current.loop = true;
+        videoRef.current.loop = false; // Disable looping!
         videoRef.current.muted = true;
         videoRef.current.playsInline = true;
         videoRef.current.pause();
@@ -702,8 +702,7 @@ const App = () => {
       )}
 
       <main className="desktop-content">
-        {activeTab === 'home' ? (
-          <div className="home-container">
+        <div className="home-container" style={{ display: activeTab === 'home' ? 'flex' : 'none' }}>
             <div className="home-hero">
               <div className="hero-text">
                 <div className="hero-badge-container">
@@ -835,8 +834,9 @@ const App = () => {
               </div>
             </div>
           </div>
-        ) : activeTab === 'live' ? (
-          <div className="live-container">
+        </div>
+
+        <div className="live-container" style={{ display: activeTab === 'live' ? 'grid' : 'none' }}>
             <div className="live-left">
               {uploadedVideoUrl && (
                 <div className="uploaded-video-banner">
@@ -862,6 +862,11 @@ const App = () => {
                   autoPlay={false}
                   playsInline
                   muted
+                  onEnded={() => {
+                    console.log("[Video] Video playback finished. Stopping monitoring loops...");
+                    if (isMonitoringSignalRef.current) toggleSignalMonitoring();
+                    if (isMonitoringTripleRef.current) toggleTripleMonitoring();
+                  }}
                   style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
                 />
                 <canvas ref={canvasRef} style={{ display: 'none' }} />
@@ -951,8 +956,9 @@ const App = () => {
               </div>
             </div>
           </div>
-        ) : (
-          <div className="history-container">
+        </div>
+
+        <div className="history-container" style={{ display: activeTab === 'history' ? 'flex' : 'none' }}>
             <div className="controls-bar">
               <div className="dropdown-style">
                 <span>Show latest first</span>
@@ -1057,7 +1063,7 @@ const App = () => {
               )}
             </div>
           </div>
-        )}
+        </div>
       </main>
     </div>
   );
