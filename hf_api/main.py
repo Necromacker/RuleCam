@@ -160,16 +160,21 @@ class DetectRequest(BaseModel):
 @app.post("/detect_signal")
 async def detect_signal(req: DetectRequest):
     try:
+        print("\n" + "="*50)
+        print("[HF-CLOUD] /detect_signal API request received.")
         img_data = req.image
         if img_data.startswith("data:image"):
             img_data = img_data.split(",")[1]
             
         img_bytes = base64.b64decode(img_data)
+        print(f"[HF-CLOUD] Decoded base64 frame size: {len(img_bytes)} bytes.")
         np_arr = np.frombuffer(img_bytes, np.uint8)
         frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         if frame is None:
+            print("[HF-CLOUD] Error: Failed to decode image frame.")
             return {"error": "Failed to decode image"}
         h, w = frame.shape[:2]
+        print(f"[HF-CLOUD] OpenCV decoded frame size: {w}x{h}")
         
         results = model(frame, imgsz=320, verbose=False)
         
@@ -214,6 +219,12 @@ async def detect_signal(req: DetectRequest):
                         d["is_violating"] = True
                         v_found = True
                         
+        print(f"[HF-CLOUD] Inference completed. Objects detected: {len(detections)}")
+        for idx, d in enumerate(detections):
+            print(f"  └─ Object[{idx}]: {d['object']} (Conf: {d['confidence']:.2f}, BBox: {d['bbox']}, Violating: {d['is_violating']})")
+        print(f"[HF-CLOUD] Signal state identified: {light_state.upper()}, Violation Detected: {v_found}")
+        print("="*50)
+
         return {
             "detections": detections,
             "violation_detected": v_found,
@@ -221,21 +232,27 @@ async def detect_signal(req: DetectRequest):
             "image_shape": [h, w]
         }
     except Exception as e:
+        print(f"[HF-CLOUD] Fatal exception: {e}")
         return {"error": str(e)}
 
 @app.post("/detect_triple")
 async def detect_triple(req: DetectRequest):
     try:
+        print("\n" + "="*50)
+        print("[HF-CLOUD] /detect_triple API request received.")
         img_data = req.image
         if img_data.startswith("data:image"):
             img_data = img_data.split(",")[1]
             
         img_bytes = base64.b64decode(img_data)
+        print(f"[HF-CLOUD] Decoded base64 frame size: {len(img_bytes)} bytes.")
         np_arr = np.frombuffer(img_bytes, np.uint8)
         frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         if frame is None:
+            print("[HF-CLOUD] Error: Failed to decode image frame.")
             return {"error": "Failed to decode image"}
         h, w = frame.shape[:2]
+        print(f"[HF-CLOUD] OpenCV decoded frame size: {w}x{h}")
         
         results = model(frame, imgsz=320, verbose=False)
         
@@ -280,12 +297,19 @@ async def detect_triple(req: DetectRequest):
                 m["det"]["is_violating"] = True
                 v_found = True
                 
+        print(f"[HF-CLOUD] Inference completed. Objects detected: {len(detections)}")
+        for idx, d in enumerate(detections):
+            print(f"  └─ Object[{idx}]: {d['object']} (Conf: {d['confidence']:.2f}, BBox: {d['bbox']}, Violating: {d['is_violating']})")
+        print(f"[HF-CLOUD] Motorcycle rider counts: {[m['count'] for m in motorcycles]}, Violation Detected: {v_found}")
+        print("="*50)
+
         return {
             "detections": detections,
             "violation_detected": v_found,
             "image_shape": [h, w]
         }
     except Exception as e:
+        print(f"[HF-CLOUD] Fatal exception: {e}")
         return {"error": str(e)}
 
 

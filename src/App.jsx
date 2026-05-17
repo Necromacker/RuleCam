@@ -45,11 +45,6 @@ const App = () => {
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState(null);
   const [uploadedVideoName, setUploadedVideoName] = useState(null);
   const [rawVideoFile, setRawVideoFile] = useState(null);
-  const [scannedFrames, setScannedFrames] = useState([]);
-  const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
-  const [isScanningVideo, setIsScanningVideo] = useState(false);
-  const [isPlayingScannedFrames, setIsPlayingScannedFrames] = useState(false);
-  const [activeScanType, setActiveScanType] = useState(null);
 
   
   // Specific Video Chat States
@@ -77,10 +72,6 @@ const App = () => {
     setUploadedVideoUrl(url);
     setUploadedVideoName(file.name);
     setRawVideoFile(file);
-    setScannedFrames([]);
-    setIsPlayingScannedFrames(false);
-    setCurrentFrameIndex(0);
-    setActiveScanType(null);
     setActiveTab("live");
 
     setChatMessages(prev => [...prev, { sender: 'user', text: `Uploaded: ${file.name}` }]);
@@ -91,24 +82,30 @@ const App = () => {
     formData.append('type', "Manual VideoDB Upload");
 
     try {
+      console.log(`[VideoDB Process] Uploading Video File: '${file.name}' - Size: ${Math.round(file.size / 1024)} KB to Flask backend /report_violation...`);
       setChatMessages(prev => [...prev, { sender: 'bot', text: "Uploading and processing with VideoDB AI... This might take a minute." }]);
       
+      const startTime = performance.now();
       const res = await fetch(`${BACKEND_URL}/report_violation`, {
         method: 'POST',
         body: formData
       });
       const data = await res.json();
+      const elapsed = performance.now() - startTime;
       
       if (res.ok) {
+        console.log(`[VideoDB Process] Video uploaded successfully in ${Math.round(elapsed)}ms. Received Record ID: ${data.id}. Starting real-time AI context analysis polling...`);
         const recordId = data.id;
         // Poll for AI analysis
         const pollInterval = setInterval(async () => {
+          console.log(`[VideoDB Process] Polling backend for AI analysis status of Record ID: ${recordId}...`);
           const vRes = await fetch(`${BACKEND_URL}/violations`);
           const vData = await vRes.json();
           const record = vData.find(v => v.id === recordId);
           
           if (record && record.ai_analysis && record.status !== 'Pending') {
-            console.log(`[VideoDB Process] Final Status: ${record.status} - ${record.ai_analysis}`);
+            console.log(`[VideoDB Process] Polling Finished! Final Status: ${record.status}`);
+            console.log(`  └─ AI Context Analysis: "${record.ai_analysis}"`);
             if (record.status === 'Confirmed') {
               setChatMessages(prev => [...prev, { sender: 'bot', text: `Analysis Complete: Violation Confirmed! ${record.ai_analysis}` }]);
             } else {
@@ -118,7 +115,7 @@ const App = () => {
             setIsUploading(false);
             fetchViolations(); // refresh history
           } else if (record && record.ai_analysis && record.ai_analysis !== "Processing") {
-            console.log(`[VideoDB Process] ${record.ai_analysis}`);
+            console.log(`[VideoDB Process] Progress Update: "${record.ai_analysis}"`);
             setChatMessages(prev => {
               const newMsgs = [...prev];
               const lastMsg = newMsgs[newMsgs.length - 1];
@@ -132,12 +129,13 @@ const App = () => {
           }
         }, 5000);
       } else {
-        setChatMessages(prev => [...prev, { sender: 'bot', text: "Sorry, upload failed." }]);
+        console.error(`[VideoDB Process] Upload failed:`, data.error);
+        setChatMessages(prev => [...prev, { sender: 'bot', text: `Upload failed: ${data.error || "Server error"}` }]);
         setIsUploading(false);
       }
     } catch (err) {
-      console.error(err);
-      setChatMessages(prev => [...prev, { sender: 'bot', text: "An error occurred during upload." }]);
+      console.error("[VideoDB Process] Error in upload/analysis:", err);
+      setChatMessages(prev => [...prev, { sender: 'bot', text: `Error uploading video: ${err.message}` }]);
       setIsUploading(false);
     }
   };
@@ -212,7 +210,7 @@ const App = () => {
         videoRef.current.loop = true;
         videoRef.current.muted = true;
         videoRef.current.playsInline = true;
-        videoRef.current.play().catch(err => console.log("Video play error:", err));
+        videoRef.current.pause();
       }
     } else {
       // Clear video element source and start webcam
@@ -305,7 +303,7 @@ const App = () => {
     const imageData = canvas.toDataURL('image/jpeg', 0.5);
 
     try {
-      console.log("[Signal Monitoring] Sending frame to backend...");
+      console.log(`[YOLO STREAM] Captured Frame (${canvas.width}x${canvas.height}) - Size: ${Math.round(imageData.length / 1024)} KB. Uploading frame to YOLO backend...`);
       const res = await fetch(`${BACKEND_URL}/detect_signal`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -315,7 +313,15 @@ const App = () => {
       const data = await res.json();
       const elapsed = performance.now() - startTime;
       const currentFps = Math.round(1000 / elapsed);
-      console.log(`[Signal Monitoring] Received response in ${Math.round(elapsed)}ms (${currentFps} FPS):`, data);
+      console.log(`[YOLO STREAM] Received response in ${Math.round(elapsed)}ms (${currentFps} FPS). Detections found:`, data.detections);
+      if (data.detections && data.detections.length > 0) {
+        data.detections.forEach((det, i) => {
+          console.log(`  └─ Detections[${i}]: Object='${det.object}', Conf=${Math.round(det.confidence * 100)}%, Violating=${det.is_violating}, BBox=[${det.bbox.join(", ")}]`);
+        });
+      } else {
+        console.log("  └─ No objects detected in this frame.");
+      }
+      console.log(`  └─ Traffic Light State: ${data.traffic_light_state.toUpperCase()}, Violation Detected: ${data.violation_detected}`);
 
       setDetections(data.detections || []);
       setIsViolationFound(data.violation_detected || false);
@@ -324,7 +330,7 @@ const App = () => {
       drawOverlay(data.detections || [], data.image_shape, data.violation_detected, data.traffic_light_state);
       return elapsed;
     } catch (err) {
-      console.error("[Signal Monitoring] Error:", err);
+      console.error("[YOLO STREAM] Error uploading frame:", err);
       return 0;
     }
   }, [drawOverlay]);
@@ -343,7 +349,7 @@ const App = () => {
     const imageData = canvas.toDataURL('image/jpeg', 0.5);
 
     try {
-      console.log("[Triple Monitoring] Sending frame to backend...");
+      console.log(`[YOLO STREAM] Captured Frame (${canvas.width}x${canvas.height}) - Size: ${Math.round(imageData.length / 1024)} KB. Uploading frame to YOLO backend...`);
       const res = await fetch(`${BACKEND_URL}/detect_triple`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -353,7 +359,15 @@ const App = () => {
       const data = await res.json();
       const elapsed = performance.now() - startTime;
       const currentFps = Math.round(1000 / elapsed);
-      console.log(`[Triple Monitoring] Received response in ${Math.round(elapsed)}ms (${currentFps} FPS):`, data);
+      console.log(`[YOLO STREAM] Received response in ${Math.round(elapsed)}ms (${currentFps} FPS). Detections found:`, data.detections);
+      if (data.detections && data.detections.length > 0) {
+        data.detections.forEach((det, i) => {
+          console.log(`  └─ Detections[${i}]: Object='${det.object}', Conf=${Math.round(det.confidence * 100)}%, Violating=${det.is_violating}, BBox=[${det.bbox.join(", ")}]`);
+        });
+      } else {
+        console.log("  └─ No objects detected in this frame.");
+      }
+      console.log(`  └─ Violation Detected: ${data.violation_detected}`);
 
       setDetections(data.detections || []);
       setIsViolationFound(data.violation_detected || false);
@@ -362,7 +376,7 @@ const App = () => {
       drawOverlay(data.detections || [], data.image_shape, data.violation_detected, "N/A");
       return elapsed;
     } catch (err) {
-      console.error("[Triple Monitoring] Error:", err);
+      console.error("[YOLO STREAM] Error uploading frame:", err);
       return 0;
     }
   }, [drawOverlay]);
@@ -514,87 +528,7 @@ const App = () => {
     }
   };
 
-  // Handle pre-scanned frames playback loop
-  useEffect(() => {
-    let interval = null;
-    if (isPlayingScannedFrames && scannedFrames.length > 0) {
-      interval = setInterval(() => {
-        setCurrentFrameIndex(prev => (prev + 1) % scannedFrames.length);
-      }, 200); // 5 FPS (200ms per frame)
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isPlayingScannedFrames, scannedFrames]);
-
-  const handleVideoScan = async (scanType) => {
-    if (!rawVideoFile) return;
-    
-    // Stop any active live camera tracking loops
-    if (isMonitoringSignalRef.current) {
-      isMonitoringSignalRef.current = false;
-      setIsMonitoringSignal(false);
-    }
-    if (isMonitoringTripleRef.current) {
-      isMonitoringTripleRef.current = false;
-      setIsMonitoringTriple(false);
-    }
-    if (loopTimeoutRef.current) {
-      clearTimeout(loopTimeoutRef.current);
-      loopTimeoutRef.current = null;
-    }
-
-    setIsScanningVideo(true);
-    setScannedFrames([]);
-    setCurrentFrameIndex(0);
-    setIsPlayingScannedFrames(false);
-    setActiveScanType(scanType);
-
-    const formData = new FormData();
-    formData.append("video", rawVideoFile);
-    formData.append("type", scanType);
-
-    try {
-      const res = await fetch(`${BACKEND_URL}/scan_uploaded_video`, {
-        method: "POST",
-        body: formData
-      });
-      const data = await res.json();
-      if (res.ok && data.status === "success" && data.frames) {
-        setScannedFrames(data.frames);
-        setIsPlayingScannedFrames(true);
-        // Alert if violation was found in any frame
-        const hasViolation = data.frames.some(f => f.violation_detected);
-        if (hasViolation) {
-          setIsViolationFound(true);
-          setTimeout(() => setIsViolationFound(false), 5000);
-        }
-      } else {
-        alert(data.error || "Failed to scan video");
-      }
-    } catch (err) {
-      console.error("Error scanning video:", err);
-      alert("Error scanning video with YOLO backend.");
-    } finally {
-      setIsScanningVideo(false);
-    }
-  };
-
   const toggleSignalMonitoring = () => {
-    if (uploadedVideoUrl) {
-      if (isScanningVideo) return;
-      if (isPlayingScannedFrames) {
-        setIsPlayingScannedFrames(false);
-      } else {
-        if (scannedFrames.length > 0 && activeScanType === "signal") {
-          setIsPlayingScannedFrames(true);
-        } else {
-          handleVideoScan("signal");
-        }
-      }
-      return;
-    }
-
     if (isMonitoringSignalRef.current) {
       isMonitoringSignalRef.current = false;
       setIsMonitoringSignal(false);
@@ -602,9 +536,17 @@ const App = () => {
         clearTimeout(loopTimeoutRef.current);
         loopTimeoutRef.current = null;
       }
+      if (uploadedVideoUrl && videoRef.current) {
+        videoRef.current.pause();
+      }
       setDetections([]);
       setFps(0);
       setIsViolationFound(false);
+      const overlay = overlayCanvasRef.current;
+      if (overlay) {
+        const ctx = overlay.getContext('2d');
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+      }
     } else {
       if (isMonitoringTripleRef.current) {
         isMonitoringTripleRef.current = false;
@@ -612,25 +554,14 @@ const App = () => {
       }
       isMonitoringSignalRef.current = true;
       setIsMonitoringSignal(true);
+      if (uploadedVideoUrl && videoRef.current) {
+        videoRef.current.play().catch(err => console.log("Video play error:", err));
+      }
       captureAndDetectSignalLoop();
     }
   };
 
   const toggleTripleMonitoring = () => {
-    if (uploadedVideoUrl) {
-      if (isScanningVideo) return;
-      if (isPlayingScannedFrames) {
-        setIsPlayingScannedFrames(false);
-      } else {
-        if (scannedFrames.length > 0 && activeScanType === "triple") {
-          setIsPlayingScannedFrames(true);
-        } else {
-          handleVideoScan("triple");
-        }
-      }
-      return;
-    }
-
     if (isMonitoringTripleRef.current) {
       isMonitoringTripleRef.current = false;
       setIsMonitoringTriple(false);
@@ -638,9 +569,17 @@ const App = () => {
         clearTimeout(loopTimeoutRef.current);
         loopTimeoutRef.current = null;
       }
+      if (uploadedVideoUrl && videoRef.current) {
+        videoRef.current.pause();
+      }
       setDetections([]);
       setFps(0);
       setIsViolationFound(false);
+      const overlay = overlayCanvasRef.current;
+      if (overlay) {
+        const ctx = overlay.getContext('2d');
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+      }
     } else {
       if (isMonitoringSignalRef.current) {
         isMonitoringSignalRef.current = false;
@@ -648,6 +587,9 @@ const App = () => {
       }
       isMonitoringTripleRef.current = true;
       setIsMonitoringTriple(true);
+      if (uploadedVideoUrl && videoRef.current) {
+        videoRef.current.play().catch(err => console.log("Video play error:", err));
+      }
       captureAndDetectTripleLoop();
     }
   };
@@ -904,10 +846,6 @@ const App = () => {
                     setUploadedVideoUrl(null);
                     setUploadedVideoName(null);
                     setRawVideoFile(null);
-                    setScannedFrames([]);
-                    setCurrentFrameIndex(0);
-                    setIsPlayingScannedFrames(false);
-                    setActiveScanType(null);
                     if (isMonitoringSignalRef.current) toggleSignalMonitoring();
                     if (isMonitoringTripleRef.current) toggleTripleMonitoring();
                   }}>
@@ -917,39 +855,19 @@ const App = () => {
               )}
 
               <div className="video-card">
-                {scannedFrames.length > 0 ? (
-                  <div className="scanned-player-wrapper" style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                    <img
-                      src={scannedFrames[currentFrameIndex].image}
-                      alt="YOLO Scanned Frame"
-                      style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
-                    />
-                    {isPlayingScannedFrames && <div className="scanning-laser-line"></div>}
-                  </div>
-                ) : isScanningVideo ? (
-                  <div className="scanning-loader-container">
-                    <div className="spinner-loader"></div>
-                    <div className="scanner-line"></div>
-                    <h3>AI Frame Scanner Active</h3>
-                    <p>YOLOv8 is parsing the video frame-by-frame and drawing bounding boxes...</p>
-                  </div>
-                ) : (
-                  <>
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
-                    />
-                    <canvas ref={canvasRef} style={{ display: 'none' }} />
-                    <canvas
-                      ref={overlayCanvasRef}
-                      className="overlay-canvas"
-                      style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
-                    />
-                  </>
-                )}
+                <video
+                  ref={videoRef}
+                  autoPlay={false}
+                  playsInline
+                  muted
+                  style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
+                />
+                <canvas ref={canvasRef} style={{ display: 'none' }} />
+                <canvas
+                  ref={overlayCanvasRef}
+                  className="overlay-canvas"
+                  style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
+                />
 
                 {isMonitoringSignal && (
                   <div className="light-indicator">
@@ -957,15 +875,9 @@ const App = () => {
                   </div>
                 )}
 
-                {scannedFrames.length > 0 && scannedFrames[currentFrameIndex].traffic_light_state !== "N/A" && (
-                  <div className="light-indicator">
-                    {scannedFrames[currentFrameIndex].traffic_light_state.toUpperCase()} SIGNAL
-                  </div>
-                )}
-
-                {(isMonitoringSignal || isMonitoringTriple || isScanningVideo || isPlayingScannedFrames) && (
+                {(isMonitoringSignal || isMonitoringTriple) && (
                   <div className="stats-overlay">
-                    {isScanningVideo ? "SCANNING" : (isPlayingScannedFrames ? "PLAYING" : `FPS ${fps || 5}`)}
+                    FPS {fps}
                   </div>
                 )}
 
@@ -976,56 +888,23 @@ const App = () => {
                 )}
               </div>
 
-              {scannedFrames.length > 0 && (
-                <div className="frame-scrubber-container">
-                  <div className="scrubber-controls">
-                    <button 
-                      className="scrubber-btn" 
-                      onClick={() => setIsPlayingScannedFrames(prev => !prev)}
-                    >
-                      {isPlayingScannedFrames ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="4" height="16"></rect><rect x="16" y="4" width="4" height="16"></rect></svg>
-                      ) : (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                      )}
-                    </button>
-                    <span className="frame-count-label">
-                      Frame {currentFrameIndex + 1} / {scannedFrames.length}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max={scannedFrames.length - 1}
-                    value={currentFrameIndex}
-                    onChange={(e) => {
-                      setIsPlayingScannedFrames(false); // Pause playing when scrubbing manually
-                      setCurrentFrameIndex(parseInt(e.target.value));
-                    }}
-                    className="neobrutalist-slider"
-                  />
-                </div>
-              )}
-
               <div className="action-buttons">
                 <div className="action-row">
                   <button
-                    className={`card-btn ${isMonitoringSignal || (isPlayingScannedFrames && activeScanType === 'signal') ? 'active' : ''}`}
+                    className={`card-btn ${isMonitoringSignal ? 'active' : ''}`}
                     onClick={toggleSignalMonitoring}
-                    disabled={isScanningVideo}
                   >
                     {uploadedVideoUrl 
-                      ? (isScanningVideo ? 'Scanning...' : (isPlayingScannedFrames && activeScanType === 'signal' ? 'Pause Scan' : 'Scan Signal Violations'))
+                      ? (isMonitoringSignal ? 'Stop Scan' : 'Scan Signal Violations')
                       : (isMonitoringSignal ? 'Stop Signal' : 'Start Signal')
                     }
                   </button>
                   <button
-                    className={`card-btn ${isMonitoringTriple || (isPlayingScannedFrames && activeScanType === 'triple') ? 'active' : ''}`}
+                    className={`card-btn ${isMonitoringTriple ? 'active' : ''}`}
                     onClick={toggleTripleMonitoring}
-                    disabled={isScanningVideo}
                   >
                     {uploadedVideoUrl
-                      ? (isScanningVideo ? 'Scanning...' : (isPlayingScannedFrames && activeScanType === 'triple' ? 'Pause Scan' : 'Scan Triple Riding'))
+                      ? (isMonitoringTriple ? 'Stop Scan' : 'Scan Triple Riding')
                       : (isMonitoringTriple ? 'Stop Triple' : 'Start Triple')
                     }
                   </button>

@@ -50,26 +50,31 @@ def health():
     return jsonify({"status": "ok", "model": "yolov8n"})
 
 @app.route("/detect_signal", methods=["POST"])
+@app.route("/detect_signal", methods=["POST"])
 def detect_signal():
     try:
         data = request.json
+        print("\n" + "="*50)
+        print("[BACKEND] /detect_signal API request received.")
         
         # Determine if we should bypass local YOLO and run the Hugging Face Space API call directly
-        # Bypassed on Render or if local model didn't load or if HF_API_URL is explicitly configured
         run_local = (local_yolo is not None) and (not os.getenv("RENDER")) and (not os.getenv("HF_API_URL"))
         
         if run_local:
-            # Local YOLOv8 detection logic
+            print("[BACKEND] Running local YOLOv8 inference...")
             img_data = data.get("image", "")
             if img_data.startswith("data:image"):
                 img_data = img_data.split(",")[1]
                 
             img_bytes = base64.b64decode(img_data)
+            print(f"[BACKEND] Frame image size decoded: {len(img_bytes)} bytes.")
             np_arr = np.frombuffer(img_bytes, np.uint8)
             frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
             if frame is None:
+                print("[BACKEND] Error: Failed to decode image frame.")
                 return jsonify({"error": "Failed to decode image"}), 400
             h, w = frame.shape[:2]
+            print(f"[BACKEND] OpenCV decoded dimensions: {w}x{h}")
             
             results = local_yolo(frame, imgsz=320, verbose=False)
             
@@ -113,6 +118,12 @@ def detect_signal():
                         if (d["bbox"][3] / h) > light_y:
                             d["is_violating"] = True
                             v_found = True
+            
+            print(f"[BACKEND] Inference completed. Objects detected: {len(detections)}")
+            for idx, d in enumerate(detections):
+                print(f"  └─ Object[{idx}]: {d['object']} (Conf: {d['confidence']:.2f}, BBox: {d['bbox']}, Violating: {d['is_violating']})")
+            print(f"[BACKEND] Signal state identified: {light_state.upper()}, Violation Detected: {v_found}")
+            print("="*50)
                             
             return jsonify({
                 "detections": detections,
@@ -126,10 +137,16 @@ def detect_signal():
             hf_api_url = os.getenv("HF_API_URL", "https://necromacker-rulecam.hf.space/analyze")
             import requests
             hf_base = hf_api_url.rstrip('/').removesuffix('/analyze')
+            print(f"[BACKEND] Proxying detect_signal request directly to Hugging Face Space: {hf_base}...")
             resp = requests.post(f"{hf_base}/detect_signal", json={"image": data.get("image", "")})
             if resp.status_code == 200:
-                return jsonify(resp.json())
+                resp_json = resp.json()
+                print(f"[BACKEND] Received proxy response from HF Space. Detections found: {len(resp_json.get('detections', []))}")
+                print("="*50)
+                return jsonify(resp_json)
             else:
+                print(f"[BACKEND] Proxy request failed with status: {resp.status_code}")
+                print("="*50)
                 return jsonify({"error": f"HF API Error: {resp.status_code}"}), 500
     except Exception as e:
         print("Error in detect_signal:", e)
@@ -139,23 +156,27 @@ def detect_signal():
 def detect_triple():
     try:
         data = request.json
+        print("\n" + "="*50)
+        print("[BACKEND] /detect_triple API request received.")
         
         # Determine if we should bypass local YOLO and run the Hugging Face Space API call directly
-        # Bypassed on Render or if local model didn't load or if HF_API_URL is explicitly configured
         run_local = (local_yolo is not None) and (not os.getenv("RENDER")) and (not os.getenv("HF_API_URL"))
         
         if run_local:
-            # Local YOLOv8 detection logic
+            print("[BACKEND] Running local YOLOv8 inference...")
             img_data = data.get("image", "")
             if img_data.startswith("data:image"):
                 img_data = img_data.split(",")[1]
                 
             img_bytes = base64.b64decode(img_data)
+            print(f"[BACKEND] Frame image size decoded: {len(img_bytes)} bytes.")
             np_arr = np.frombuffer(img_bytes, np.uint8)
             frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
             if frame is None:
+                print("[BACKEND] Error: Failed to decode image frame.")
                 return jsonify({"error": "Failed to decode image"}), 400
             h, w = frame.shape[:2]
+            print(f"[BACKEND] OpenCV decoded dimensions: {w}x{h}")
             
             results = local_yolo(frame, imgsz=320, verbose=False)
             
@@ -199,6 +220,12 @@ def detect_triple():
                 if m["count"] >= 3:
                     m["det"]["is_violating"] = True
                     v_found = True
+            
+            print(f"[BACKEND] Inference completed. Objects detected: {len(detections)}")
+            for idx, d in enumerate(detections):
+                print(f"  └─ Object[{idx}]: {d['object']} (Conf: {d['confidence']:.2f}, BBox: {d['bbox']}, Violating: {d['is_violating']})")
+            print(f"[BACKEND] Motorcycle rider counts: {[m['count'] for m in motorcycles]}, Violation Detected: {v_found}")
+            print("="*50)
                     
             return jsonify({
                 "detections": detections,
@@ -211,10 +238,16 @@ def detect_triple():
             hf_api_url = os.getenv("HF_API_URL", "https://necromacker-rulecam.hf.space/analyze")
             import requests
             hf_base = hf_api_url.rstrip('/').removesuffix('/analyze')
+            print(f"[BACKEND] Proxying detect_triple request directly to Hugging Face Space: {hf_base}...")
             resp = requests.post(f"{hf_base}/detect_triple", json={"image": data.get("image", "")})
             if resp.status_code == 200:
-                return jsonify(resp.json())
+                resp_json = resp.json()
+                print(f"[BACKEND] Received proxy response from HF Space. Detections found: {len(resp_json.get('detections', []))}")
+                print("="*50)
+                return jsonify(resp_json)
             else:
+                print(f"[BACKEND] Proxy request failed with status: {resp.status_code}")
+                print("="*50)
                 return jsonify({"error": f"HF API Error: {resp.status_code}"}), 500
     except Exception as e:
         print("Error in detect_triple:", e)
@@ -541,6 +574,7 @@ def local_yolo_extract_violation_clip(file_path, v_type, record_id):
 
 def process_videodb_workflow(file_path, record_id):
     if not VIDEODB_API_KEY:
+        print("[VideoDB Process] Error: VIDEODB_API_KEY not configured in environment variables.")
         return
     
     # Small delay to ensure DB commit is finished
@@ -553,9 +587,10 @@ def process_videodb_workflow(file_path, record_id):
     conn_db.close()
     
     if not row:
-        print(f"Error: Record {record_id} not found in database.")
+        print(f"[VideoDB Process] Error: Record {record_id} not found in database.")
         return
     v_type = row[0]
+    print(f"\n[VideoDB Process] Starting Background VideoDB AI workflow for Record ID: {record_id} (Violation type: {v_type})...")
 
     with videodb_lock:
         try:
@@ -564,43 +599,54 @@ def process_videodb_workflow(file_path, record_id):
             from videodb.editor import Timeline, Track, Clip, VideoAsset
             hf_api_url = os.getenv("HF_API_URL")
             if hf_api_url:
+                print(f"[VideoDB Process] Routing to Hugging Face API at: {hf_api_url} for YOLO violation segment extraction...")
                 update_progress(record_id, "Sending video to AI Inference API for YOLO analysis...")
                 import requests
                 try:
                     with open(file_path, 'rb') as f:
+                        print(f"[VideoDB Process] Sending raw video binary payload ({os.path.basename(file_path)})...")
                         resp = requests.post(hf_api_url, files={"video": f}, data={"v_type": v_type})
                     if resp.status_code == 200:
                         encoded_clips = resp.json().get("clips", [])
+                        print(f"[VideoDB Process] HF API returned success. Extracted {len(encoded_clips)} violation clips.")
                         clips = []
                         for idx, enc in enumerate(encoded_clips):
                             out_path = os.path.join(VIOLATIONS_DIR, f"hf_clip_{record_id}_{idx}.mp4")
                             with open(out_path, "wb") as f_out:
                                 f_out.write(base64.b64decode(enc))
                             clips.append(out_path)
+                            print(f"  └─ Clip {idx+1} saved locally to: {out_path}")
                     else:
+                        print(f"[VideoDB Process] HF API returned error code: {resp.status_code}")
                         update_progress(record_id, f"HF API Error: {resp.status_code}")
                         clips = []
                 except Exception as e:
+                    print(f"[VideoDB Process] HF API connection exception: {e}")
                     update_progress(record_id, f"HF API Connection Error: {e}")
                     clips = []
             else:
                 # Local YOLO processing!
                 if local_yolo:
+                    print("[VideoDB Process] No HF_API_URL set. Running local YOLO segment extraction pipeline...")
                     update_progress(record_id, "Running local YOLO analysis & slicing violation clips...")
                     try:
                         clips = local_yolo_extract_violation_clip(file_path, v_type, record_id)
+                        print(f"[VideoDB Process] Local YOLO pipeline completed. Extracted {len(clips)} violation clips.")
                     except Exception as e:
+                        print(f"[VideoDB Process] Local YOLO error: {e}")
                         update_progress(record_id, f"Local YOLO Error: {str(e)}")
                         clips = []
                 else:
+                    print("[VideoDB Process] Error: Both HF_API_URL and local YOLO are unavailable.")
                     update_progress(record_id, "Error: HF_API_URL not set and local YOLO is unavailable.")
                     clips = []
             
             if not clips:
+                print(f"[VideoDB Process] Done. YOLO did not detect any violations in '{os.path.basename(file_path)}'.")
                 update_progress(record_id, "No violations detected by YOLO.")
                 return
 
-
+            print(f"[VideoDB Process] Authenticating with VideoDB Cloud via API Key...")
             conn = videodb.connect(api_key=VIDEODB_API_KEY)
             
             for i, clip_path in enumerate(clips):
@@ -613,17 +659,23 @@ def process_videodb_workflow(file_path, record_id):
                     rid = cursor.lastrowid
                     conn_db.commit()
                     conn_db.close()
+                    print(f"[VideoDB Process] Created additional sub-record ID: {rid} for clip segment {i+1}")
 
+                print(f"[VideoDB Process] [Clip {i+1}] Uploading file segment to VideoDB Cloud storage...")
                 update_progress(rid, f"Uploading clip {i+1} to VideoDB...")
                 video = conn.upload(clip_path)
+                print(f"  └─ Upload Complete. Video ID in Cloud: {video.id}")
                 
+                print(f"[VideoDB Process] [Clip {i+1}] Setting up HLS video streaming tracks...")
                 timeline = Timeline(conn)
                 video_asset = VideoAsset(id=video.id, start=0)
                 track = Track()
                 track.add_clip(0, Clip(asset=video_asset, duration=video.length))
                 timeline.add_track(track)
                 stream_url = timeline.generate_stream()
+                print(f"  └─ Generated Streaming Stream HLS URL: {stream_url}")
                 
+                print(f"[VideoDB Process] [Clip {i+1}] Running shot-based indexing on the video asset...")
                 update_progress(rid, f"AI analysis for clip {i+1}...")
                 video.index_scenes(extraction_type=SceneExtractionType.shot_based)
                 
@@ -631,6 +683,7 @@ def process_videodb_workflow(file_path, record_id):
                 scenes = []
                 scene_context = ""
                 for attempt in range(6):
+                    print(f"[VideoDB Process] [Clip {i+1}] Polling shot indexing status (attempt {attempt+1}/6)...")
                     time.sleep(10)
                     try:
                         indexes = video.list_scene_index()
@@ -638,19 +691,22 @@ def process_videodb_workflow(file_path, record_id):
                             idx_id = indexes[0].get('scene_index_id') if isinstance(indexes[0], dict) else indexes[0]
                             scenes = video.get_scene_index(idx_id)
                             if scenes:
+                                print(f"  └─ Shot index ready! Extracted {len(scenes)} distinct camera shots.")
                                 for j, s in enumerate(scenes[:8]):
                                     desc = s.get('description', '') if isinstance(s, dict) else str(s)
-                                    if desc: scene_context += f"Scene {j+1}: {desc}\n"
+                                    if desc: 
+                                        scene_context += f"Scene {j+1}: {desc}\n"
+                                        print(f"     └─ Scene description [{j+1}]: \"{desc}\"")
                                 break
-                        print(f"[VideoDB] Waiting for indexing (attempt {attempt+1}/6)...")
+                        print(f"[VideoDB Process] [Clip {i+1}] Waiting for scene index assembly...")
                     except Exception as e:
-                        print(f"[VideoDB] Indexing poll error: {e}")
+                        print(f"[VideoDB Process] [Clip {i+1}] Indexing poll warning: {e}")
 
                 status = "Rejected"
                 analysis = "No violation confirmed by AI."
 
                 if scene_context:
-                    # Use LLM to confirm violation based on scenes (matches chat logic)
+                    print(f"[VideoDB Process] [Clip {i+1}] Assembled Scene context. Initializing LLM context check...")
                     coll = conn.get_collection()
                     prompt = f"""Analyze these video scenes and determine if there is a traffic violation (specifically looking for: {v_type}). 
 SCENES:
@@ -658,9 +714,11 @@ SCENES:
 
 Respond with exactly 'VERDICT: CONFIRMED' if a violation is present, or 'VERDICT: REJECTED' if not. Then provide a one-sentence explanation."""
                     
+                    print(f"  └─ Generating prompt validation:\n{prompt}\n")
                     try:
                         llm_res = coll.generate_text(prompt)
                         res_text = llm_res.get('output', str(llm_res)) if isinstance(llm_res, dict) else str(llm_res)
+                        print(f"  └─ Generative AI Response Output: \"{res_text}\"")
                         
                         if "CONFIRMED" in res_text.upper():
                             status = "Confirmed"
@@ -669,32 +727,43 @@ Respond with exactly 'VERDICT: CONFIRMED' if a violation is present, or 'VERDICT
                             status = "Rejected"
                             analysis = f"AI Rejected: {res_text.split('REJECTED')[-1].strip(': ').strip()}"
                     except Exception as e:
-                        print(f"[VideoDB] LLM Analysis error: {e}")
+                        print(f"[VideoDB Process] [Clip {i+1}] LLM Analysis error: {e}")
                         # Fallback to basic search if LLM fails
                         try:
+                            print(f"[VideoDB Process] [Clip {i+1}] Falling back to keyword search indexing...")
                             search_results = video.search("identify traffic violation")
                             if search_results and len(search_results) > 0:
                                 status = "Confirmed"
                                 analysis = f"Confirmed via search fallback ({len(search_results)} results)."
+                                print(f"  └─ Keyword search found matches. Status updated to Confirmed.")
                         except:
                             pass
                 else:
                     # Fallback if scenes never ready
+                    print(f"[VideoDB Process] [Clip {i+1}] Shot indexing timed out. Bypassing LLM context verification.")
                     analysis = "Rejected: Video scene data never became available for analysis."
                 
+                print(f"[VideoDB Process] [Clip {i+1}] Committing results to local SQLite database:")
+                print(f"  ├─ ID: {rid}")
+                print(f"  ├─ Status: {status}")
+                print(f"  └─ Analysis: {analysis}")
                 conn_db = sqlite3.connect(DB_PATH)
                 cursor = conn_db.cursor()
                 cursor.execute('UPDATE violations SET videodb_url=?, video_path=?, videodb_id=?, status=?, ai_analysis=? WHERE id=?', 
                                (stream_url, os.path.basename(clip_path), video.id, status, analysis, rid))
                 conn_db.commit()
                 conn_db.close()
+                print(f"[VideoDB Process] [Clip {i+1}] Database record ID: {rid} updated successfully.")
 
             if os.path.exists(file_path):
                 os.remove(file_path)
+                print(f"[VideoDB Process] Cleared local temporary working video: {file_path}")
+            print(f"[VideoDB Process] Background job for Record ID: {record_id} finished successfully.\n")
                 
         except Exception as e:
             import traceback
             traceback.print_exc()
+            print(f"[VideoDB Process] Fatal background error: {e}")
             update_progress(record_id, f"Error: {str(e)}")
 
 @app.route("/report_violation", methods=["POST"])
