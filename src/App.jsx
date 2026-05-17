@@ -38,6 +38,7 @@ const App = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
   const scanningFileInputRef = useRef(null);
+  const hasUploadedCurrentViolationRef = useRef(false);
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -309,6 +310,36 @@ const App = () => {
     });
   }, []);
 
+  // Instant Automatic Violation Upload (called as soon as a violation is flagged in a frame)
+  const reportViolationInstant = useCallback(async (dets, isSignalScan) => {
+    const potentialViolation = dets.find(d => d.is_violating) || dets.find(d => ["car", "motorcycle", "bus", "truck"].includes(d.object));
+
+    const formData = new FormData();
+    formData.append('type', isSignalScan ? 'Signal Jumping' : 'Triple Riding');
+    formData.append('vehicle', potentialViolation ? potentialViolation.object : 'Unknown');
+    formData.append('confidence', potentialViolation ? potentialViolation.confidence : 0);
+
+    if (canvasRef.current) {
+      canvasRef.current.toBlob(async (blob) => {
+        if (!blob) return;
+        formData.append('media', blob, 'instant_violation.jpg');
+        try {
+          console.log("[Auto-Upload] Submitting instant violation frame to backend...");
+          const res = await fetch(`${BACKEND_URL}/report_violation`, {
+            method: 'POST',
+            body: formData
+          });
+          if (res.ok) {
+            console.log("[Auto-Upload] Instant violation reported successfully!");
+            fetchViolations(); // Refresh SQLite history tab instantly!
+          }
+        } catch (err) {
+          console.error("[Auto-Upload] Error reporting instant violation:", err);
+        }
+      }, 'image/jpeg', 0.95);
+    }
+  }, [fetchViolations]);
+
   // Capture and Detect Signal Jumping
   const captureAndDetectSignal = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) return 0;
@@ -348,12 +379,20 @@ const App = () => {
       setLightState(data.traffic_light_state || "unknown");
       setFps(currentFps);
       drawOverlay(data.detections || [], data.image_shape, data.violation_detected, data.traffic_light_state);
+
+      // Auto-upload violation frame instantly
+      if (data.violation_detected && !hasUploadedCurrentViolationRef.current) {
+        hasUploadedCurrentViolationRef.current = true;
+        console.log("[Auto-Upload] Instantly reporting detected violation frame...");
+        reportViolationInstant(data.detections || [], true);
+      }
+
       return elapsed;
     } catch (err) {
       console.error("[YOLO STREAM] Error uploading frame:", err);
       return 0;
     }
-  }, [drawOverlay]);
+  }, [drawOverlay, reportViolationInstant]);
 
   // Capture and Detect Triple Riding
   const captureAndDetectTriple = useCallback(async () => {
@@ -394,28 +433,34 @@ const App = () => {
       setLightState("N/A");
       setFps(currentFps);
       drawOverlay(data.detections || [], data.image_shape, data.violation_detected, "N/A");
+
+      // Auto-upload violation frame instantly
+      if (data.violation_detected && !hasUploadedCurrentViolationRef.current) {
+        hasUploadedCurrentViolationRef.current = true;
+        console.log("[Auto-Upload] Instantly reporting detected violation frame...");
+        reportViolationInstant(data.detections || [], false);
+      }
+
       return elapsed;
     } catch (err) {
       console.error("[YOLO STREAM] Error uploading frame:", err);
       return 0;
     }
-  }, [drawOverlay]);
+  }, [drawOverlay, reportViolationInstant]);
 
   const captureAndDetectSignalLoop = useCallback(async () => {
     if (!isMonitoringSignalRef.current) return;
-    const elapsed = await captureAndDetectSignal();
+    await captureAndDetectSignal();
     if (isMonitoringSignalRef.current) {
-      const nextDelay = Math.max(100, 1000 - elapsed);
-      loopTimeoutRef.current = setTimeout(captureAndDetectSignalLoop, nextDelay);
+      loopTimeoutRef.current = setTimeout(captureAndDetectSignalLoop, 0);
     }
   }, [captureAndDetectSignal]);
 
   const captureAndDetectTripleLoop = useCallback(async () => {
     if (!isMonitoringTripleRef.current) return;
-    const elapsed = await captureAndDetectTriple();
+    await captureAndDetectTriple();
     if (isMonitoringTripleRef.current) {
-      const nextDelay = Math.max(100, 1000 - elapsed);
-      loopTimeoutRef.current = setTimeout(captureAndDetectTripleLoop, nextDelay);
+      loopTimeoutRef.current = setTimeout(captureAndDetectTripleLoop, 0);
     }
   }, [captureAndDetectTriple]);
 
@@ -925,7 +970,10 @@ const App = () => {
                     if (isMonitoringSignalRef.current) toggleSignalMonitoring();
                     if (isMonitoringTripleRef.current) toggleTripleMonitoring();
                   }}
-                  style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
+                  style={{ 
+                    transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none',
+                    pointerEvents: 'none'
+                  }}
                 />
                 <canvas ref={canvasRef} style={{ display: 'none' }} />
                 <canvas
@@ -953,6 +1001,60 @@ const App = () => {
                 )}
               </div>
 
+              <div className="action-buttons" style={{ marginTop: '20px' }}>
+                <div className="action-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <button
+                    className={`card-btn ${isMonitoringSignal ? 'active' : ''}`}
+                    onClick={() => {
+                      if (isMonitoringTripleRef.current) {
+                        toggleTripleMonitoring();
+                      }
+                      if (!isMonitoringSignalRef.current) {
+                        toggleSignalMonitoring();
+                      }
+                    }}
+                    style={{ 
+                      background: isMonitoringSignal ? 'rgba(0, 240, 255, 0.12)' : 'rgba(255,255,255,0.03)',
+                      borderColor: isMonitoringSignal ? 'var(--teal)' : 'rgba(255,255,255,0.1)',
+                      color: isMonitoringSignal ? 'var(--teal)' : 'rgba(255,255,255,0.6)',
+                      fontWeight: '600',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      borderWidth: '1.5px',
+                      borderStyle: 'solid'
+                    }}
+                  >
+                    🚦 Monitor Signal Jumping
+                  </button>
+                  <button
+                    className={`card-btn ${isMonitoringTriple ? 'active' : ''}`}
+                    onClick={() => {
+                      if (isMonitoringSignalRef.current) {
+                        toggleSignalMonitoring();
+                      }
+                      if (!isMonitoringTripleRef.current) {
+                        toggleTripleMonitoring();
+                      }
+                    }}
+                    style={{ 
+                      background: isMonitoringTriple ? 'rgba(0, 240, 255, 0.12)' : 'rgba(255,255,255,0.03)',
+                      borderColor: isMonitoringTriple ? 'var(--teal)' : 'rgba(255,255,255,0.1)',
+                      color: isMonitoringTriple ? 'var(--teal)' : 'rgba(255,255,255,0.6)',
+                      fontWeight: '600',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      borderWidth: '1.5px',
+                      borderStyle: 'solid'
+                    }}
+                  >
+                    🏍️ Monitor Triple Riding
+                  </button>
+                </div>
+              </div>
 
             </div>
 
