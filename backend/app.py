@@ -775,24 +775,48 @@ def report_violation():
     v_type = request.form.get("type", "General Violation")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    filename = f"violation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
-    filepath = os.path.join(VIOLATIONS_DIR, filename)
-    file.save(filepath)
+    # Detect if the uploaded media is a JPEG/PNG image or a video file
+    is_image = False
+    if file.filename and (file.filename.lower().endswith(('.jpg', '.jpeg', '.png')) or file.content_type.startswith('image/')):
+        is_image = True
 
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO violations (timestamp, type, video_path, status) VALUES (?, ?, ?, ?)', 
-                       (timestamp, v_type, filename, "Pending"))
-        record_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"DB Error: {e}")
-        record_id = -1
+    if is_image:
+        filename = f"violation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+        filepath = os.path.join(VIOLATIONS_DIR, filename)
+        file.save(filepath)
         
-    threading.Thread(target=process_videodb_workflow, args=(filepath, record_id)).start()
-    return jsonify({"status": "success", "id": record_id})
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute('INSERT INTO violations (timestamp, type, video_path, status, ai_analysis) VALUES (?, ?, ?, ?, ?)', 
+                           (timestamp, v_type, filename, "Confirmed", "Violation confirmed by YOLO live scan snapshot."))
+            record_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"DB Error: {e}")
+            record_id = -1
+            
+        return jsonify({"status": "success", "id": record_id})
+    else:
+        filename = f"violation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+        filepath = os.path.join(VIOLATIONS_DIR, filename)
+        file.save(filepath)
+
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute('INSERT INTO violations (timestamp, type, video_path, status) VALUES (?, ?, ?, ?)', 
+                           (timestamp, v_type, filename, "Pending"))
+            record_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"DB Error: {e}")
+            record_id = -1
+            
+        threading.Thread(target=process_videodb_workflow, args=(filepath, record_id)).start()
+        return jsonify({"status": "success", "id": record_id})
 
 @app.route('/violations', methods=['GET'])
 def get_violations():

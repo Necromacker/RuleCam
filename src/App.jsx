@@ -453,62 +453,22 @@ const App = () => {
     const video = videoRef.current;
     if (!video) return;
 
-    if (uploadedVideoUrl) {
-      // 1. High-Speed Time-Skipping scanner for Custom Video Uploads!
-      if (video.readyState >= 2) {
-        await captureAndDetectSignal();
-        const nextTime = video.currentTime + 0.8;
-        if (nextTime < video.duration) {
-          video.currentTime = nextTime;
-          // Short seek buffer (150ms) to allow the browser to decode and draw the jumped frame
-          loopTimeoutRef.current = setTimeout(captureAndDetectSignalLoop, 150);
-        } else {
-          console.log("[Scanner] High-speed video rule scan complete!");
-          setIsMonitoringSignal(false);
-          isMonitoringSignalRef.current = false;
-        }
-      } else {
-        // Video buffered tracks are not fully loaded, retry seek in 100ms
-        loopTimeoutRef.current = setTimeout(captureAndDetectSignalLoop, 100);
-      }
-    } else {
-      // 2. Real-time Live Camera feed scanner
-      await captureAndDetectSignal();
-      if (isMonitoringSignalRef.current) {
-        loopTimeoutRef.current = setTimeout(captureAndDetectSignalLoop, 0);
-      }
+    await captureAndDetectSignal();
+    if (isMonitoringSignalRef.current) {
+      loopTimeoutRef.current = setTimeout(captureAndDetectSignalLoop, 0);
     }
-  }, [captureAndDetectSignal, uploadedVideoUrl]);
+  }, [captureAndDetectSignal]);
 
   const captureAndDetectTripleLoop = useCallback(async () => {
     if (!isMonitoringTripleRef.current) return;
     const video = videoRef.current;
     if (!video) return;
 
-    if (uploadedVideoUrl) {
-      // 1. High-Speed Time-Skipping scanner for Custom Video Uploads!
-      if (video.readyState >= 2) {
-        await captureAndDetectTriple();
-        const nextTime = video.currentTime + 0.8;
-        if (nextTime < video.duration) {
-          video.currentTime = nextTime;
-          loopTimeoutRef.current = setTimeout(captureAndDetectTripleLoop, 150);
-        } else {
-          console.log("[Scanner] High-speed video triple scan complete!");
-          setIsMonitoringTriple(false);
-          isMonitoringTripleRef.current = false;
-        }
-      } else {
-        loopTimeoutRef.current = setTimeout(captureAndDetectTripleLoop, 100);
-      }
-    } else {
-      // 2. Real-time Live Camera feed scanner
-      await captureAndDetectTriple();
-      if (isMonitoringTripleRef.current) {
-        loopTimeoutRef.current = setTimeout(captureAndDetectTripleLoop, 0);
-      }
+    await captureAndDetectTriple();
+    if (isMonitoringTripleRef.current) {
+      loopTimeoutRef.current = setTimeout(captureAndDetectTripleLoop, 0);
     }
-  }, [captureAndDetectTriple, uploadedVideoUrl]);
+  }, [captureAndDetectTriple]);
 
   // Start recording a clip
   const startRecording = useCallback(() => {
@@ -656,10 +616,11 @@ const App = () => {
       // 3. Start the frame capture analysis loop
       captureAndDetectSignalLoop();
 
-      // 4. Force video to remain paused and start from 0.0s for seek scanning
+      // 4. Force video to play smoothly at 5.0x speed for high-speed scanning
       if (videoRef.current) {
-        videoRef.current.pause();
+        videoRef.current.playbackRate = 5.0; // Play 5x faster to finish a 15 min video in 3 mins smoothly!
         videoRef.current.currentTime = 0;
+        videoRef.current.play().catch(err => console.log("[Auto-Start] Smooth video play error:", err));
       }
     } else {
       // For webcam mode: Reset scanning states to inactive so the user can start manually!
@@ -975,14 +936,7 @@ const App = () => {
 
         <div className="live-container" style={{ display: activeTab === 'live' ? 'grid' : 'none' }}>
             <div className="live-left">
-              {uploadedVideoUrl ? (
-                <div className="uploaded-video-banner">
-                  <div className="banner-info">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 7 16 12 23 17 23 7"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-                    <span><strong>Test Video Loaded:</strong> {uploadedVideoName || "Custom Video"}</span>
-                  </div>
-                </div>
-              ) : (
+              {!uploadedVideoUrl && (
                 <div 
                   className="uploaded-video-banner" 
                   style={{ background: 'rgba(0, 240, 255, 0.04)', border: '1.5px dashed rgba(0, 240, 255, 0.25)', cursor: 'pointer' }}
