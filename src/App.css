@@ -724,6 +724,7 @@
   flex: 0.8;
   width: 100%;
   max-width: 450px;
+  min-height: 253px;
   border: 1.5px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -731,6 +732,16 @@
   background: #000;
   aspect-ratio: 16/9;
   position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.hero-visual video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  min-height: 253px;
 }
 
 /* AI Engine Radar & Scanner Placeholder */

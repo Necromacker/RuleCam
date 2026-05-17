@@ -824,20 +824,18 @@ const App = () => {
                   </a>
                 </div>
               </div>
-              <div className="hero-visual" style={{ position: 'relative' }}>
+              <div className="hero-visual">
                 <video 
-                  src="/System_demo.mp4" 
                   autoPlay 
                   loop 
                   muted 
                   playsInline 
                   controls
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
-                <span className="hero-badge status" style={{ position: 'absolute', top: '12px', left: '12px', zIndex: 10, background: 'var(--red-badge)', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', padding: '4px 12px' }}>
-                  <span className="live-dot" style={{ display: 'inline-block', width: '6px', height: '6px', background: 'white', borderRadius: '50%', animation: 'pulse-detect 1s infinite' }}></span>
-                  SYSTEM DEMO
-                </span>
+                >
+                  <source src="/System_demo.mp4" type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
               </div>
             </div>
 
