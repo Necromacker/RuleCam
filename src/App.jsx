@@ -13,7 +13,7 @@ const App = () => {
   const isMonitoringTripleRef = useRef(false);
   const loopTimeoutRef = useRef(null);
 
-  const [activeTab, setActiveTab] = useState("live");
+  const [activeTab, setActiveTab] = useState("home");
   const [facingMode, setFacingMode] = useState("environment");
   const [detections, setDetections] = useState([]);
   const [isMonitoringSignal, setIsMonitoringSignal] = useState(false);
@@ -42,6 +42,9 @@ const App = () => {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isMessageOpen, setIsMessageOpen] = useState(false);
   
+  const [uploadedVideoUrl, setUploadedVideoUrl] = useState(null);
+  const [uploadedVideoName, setUploadedVideoName] = useState(null);
+  
   // Specific Video Chat States
   const [videoChats, setVideoChats] = useState({});
   const [chatInputs, setChatInputs] = useState({});
@@ -61,6 +64,12 @@ const App = () => {
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
+
+    // Set uploaded video URL for live scanning and auto-switch to Live Monitor tab
+    const url = URL.createObjectURL(file);
+    setUploadedVideoUrl(url);
+    setUploadedVideoName(file.name);
+    setActiveTab("live");
 
     setChatMessages(prev => [...prev, { sender: 'user', text: `Uploaded: ${file.name}` }]);
     setIsUploading(true);
@@ -177,8 +186,30 @@ const App = () => {
     }
   }, [facingMode]);
 
+  // Handle video source switching (webcam stream vs. uploaded video file)
   useEffect(() => {
-    startVideo();
+    if (uploadedVideoUrl) {
+      // Stop webcam tracks if active
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+        videoRef.current.srcObject = null;
+      }
+      // Load and play the uploaded video file
+      if (videoRef.current) {
+        videoRef.current.src = uploadedVideoUrl;
+        videoRef.current.loop = true;
+        videoRef.current.muted = true;
+        videoRef.current.playsInline = true;
+        videoRef.current.play().catch(err => console.log("Video play error:", err));
+      }
+    } else {
+      // Clear video element source and start webcam
+      if (videoRef.current) {
+        videoRef.current.src = "";
+      }
+      startVideo();
+    }
+
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
         videoRef.current.srcObject.getTracks().forEach(t => t.stop());
@@ -189,7 +220,7 @@ const App = () => {
         clearTimeout(loopTimeoutRef.current);
       }
     };
-  }, [startVideo]);
+  }, [uploadedVideoUrl, startVideo]);
 
   // Draw bounding box overlay
   const drawOverlay = useCallback((dets, imageShape, violationDetected, currentLightState) => {
@@ -559,6 +590,7 @@ const App = () => {
           </div>
           
           <div className="filter-pills desktop-only">
+            <button className={`pill ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>Home</button>
             <button className={`pill ${activeTab === 'live' ? 'active' : ''}`} onClick={() => setActiveTab('live')}>Live Monitor</button>
             <button className={`pill ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>Violations</button>
           </div>
@@ -613,28 +645,172 @@ const App = () => {
 
       {isMobileMenuOpen && (
         <div className="mobile-dropdown">
+          <button className={`pill ${activeTab === 'home' ? 'active' : ''}`} onClick={() => {setActiveTab('home'); setIsMobileMenuOpen(false);}}>Home</button>
           <button className={`pill ${activeTab === 'live' ? 'active' : ''}`} onClick={() => {setActiveTab('live'); setIsMobileMenuOpen(false);}}>Live Monitor</button>
           <button className={`pill ${activeTab === 'history' ? 'active' : ''}`} onClick={() => {setActiveTab('history'); setIsMobileMenuOpen(false);}}>Violations</button>
         </div>
       )}
 
       <main className="desktop-content">
-        {activeTab === 'live' ? (
+        {activeTab === 'home' ? (
+          <div className="home-container">
+            <div className="home-hero">
+              <div className="hero-text">
+                <div className="hero-badge-container">
+                  <span className="hero-badge yolo">YOLOv8 Real-Time Inference</span>
+                  <span className="hero-badge videodb">VideoDB AI Analysis</span>
+                  <span className="hero-badge status">Connected</span>
+                </div>
+                <h1 className="hero-title">Automated Traffic Violation Monitoring</h1>
+                <p className="hero-description">
+                  RuleCam leverages state-of-the-art YOLOv8 object detection and VideoDB LLM-powered context analysis to detect traffic violations in real-time. Start monitoring or test immediately using our pre-recorded demo video!
+                </p>
+                <a href="/demo_traffic.mp4" download="demo_traffic.mp4" className="hero-cta">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Download Demo Video
+                </a>
+              </div>
+              <div className="hero-visual">
+                <video src="/system_demo.mp4" autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+            </div>
+
+            <div>
+              <h2 className="home-section-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                How to Use RuleCam
+              </h2>
+              <p className="home-section-subtitle">Get up and running in 4 simple steps using our interactive dashboard</p>
+              
+              <div className="steps-grid">
+                <div className="step-card">
+                  <div className="step-number">1</div>
+                  <h3 className="step-title">Get Test Material</h3>
+                  <p className="step-description">Download our sample video using the button in the hero card, or prepare your own footage showing traffic movement or violations.</p>
+                  <div className="step-preview preview-download">
+                    <a href="/demo_traffic.mp4" download="demo_traffic.mp4" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', textDecoration: 'none', color: 'var(--text-primary)' }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                      <span style={{ fontSize: '12px', fontWeight: 700 }}>demo_traffic.mp4</span>
+                    </a>
+                  </div>
+                </div>
+
+                <div className="step-card">
+                  <div className="step-number">2</div>
+                  <h3 className="step-title">Upload to AI Assistant</h3>
+                  <p className="step-description">Navigate to the "Live Monitor" tab. In the right-hand panel, click the "Upload Violation Video" button and select the downloaded demo video.</p>
+                  <div className="step-preview preview-upload">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                  </div>
+                </div>
+
+                <div className="step-card">
+                  <div className="step-number">3</div>
+                  <h3 className="step-title">Real-Time Processing</h3>
+                  <p className="step-description">The AI backend instantly processes the video using YOLOv8. You'll see real-time updates as bounding boxes are plotted and violation clips are sliced.</p>
+                  <div className="step-preview preview-yolo">
+                    <div style={{ position: 'relative', width: '90%', height: '80%', border: '1.5px dashed #00f0ff', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ position: 'absolute', top: 4, left: 4, background: '#00f0ff', color: '#000', fontSize: '9px', fontWeight: 'bold', padding: '1px 3px', borderRadius: '2px' }}>car: 94%</div>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" strokeWidth="2"><rect x="1" y="3" width="15" height="13" rx="2" ry="2"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="step-card">
+                  <div className="step-number">4</div>
+                  <h3 className="step-title">Confirm & Query AI</h3>
+                  <p className="step-description">Go to the "Violations" tab to see indexed clips. Check the final AI verdict, click "Chat with AI" to query specific details of the video stream!</p>
+                  <div className="step-preview preview-chat">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '85%' }}>
+                      <div style={{ alignSelf: 'flex-end', background: 'var(--teal)', color: 'white', padding: '4px 8px', borderRadius: '8px 8px 0 8px', fontSize: '9px', fontWeight: 600 }}>Did the vehicle stop?</div>
+                      <div style={{ alignSelf: 'flex-start', background: 'white', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '4px 8px', borderRadius: '8px 8px 8px 0', fontSize: '9px', fontWeight: 600 }}>No, the car jumped the red light...</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="features-section">
+              <div className="feature-box">
+                <div className="feature-icon-title">
+                  <div className="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                  </div>
+                  <h3 className="feature-title">Live Video Monitor Mode</h3>
+                </div>
+                <div className="feature-list">
+                  <div className="feature-item">
+                    <span className="feature-bullet">✔</span>
+                    <span><strong>Signal Jumping:</strong> Checks for traffic lights and flags any vehicle crossing the boundary during a red signal.</span>
+                  </div>
+                  <div className="feature-item">
+                    <span className="feature-bullet">✔</span>
+                    <span><strong>Triple Riding:</strong> Detects motorcycles carrying more than two passengers to prevent safety violations.</span>
+                  </div>
+                  <div className="feature-item">
+                    <span className="feature-bullet">✔</span>
+                    <span><strong>Evidence Recording:</strong> Automatically cuts 10-second video clips immediately when a violation is flagged.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="feature-box">
+                <div className="feature-icon-title">
+                  <div className="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                  </div>
+                  <h3 className="feature-title">VideoDB AI Verification</h3>
+                </div>
+                <div className="feature-list">
+                  <div className="feature-item">
+                    <span className="feature-bullet">✔</span>
+                    <span><strong>Scene Shot Indexing:</strong> Videos are indexed into distinct scene shots using VideoDB APIs.</span>
+                  </div>
+                  <div className="feature-item">
+                    <span className="feature-bullet">✔</span>
+                    <span><strong>Double-Check LLM:</strong> Generates text descriptions of visual events and queries LLMs to confirm or reject YOLO alerts.</span>
+                  </div>
+                  <div className="feature-item">
+                    <span className="feature-bullet">✔</span>
+                    <span><strong>Interactive Q&A:</strong> Ask anything about the incident: license plate details, car model/color, helmet status, etc.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : activeTab === 'live' ? (
           <div className="live-container">
             <div className="live-left">
+              {uploadedVideoUrl && (
+                <div className="uploaded-video-banner">
+                  <div className="banner-info">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 7 16 12 23 17 23 7"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                    <span><strong>Test Video Loaded:</strong> {uploadedVideoName || "Custom Video"}</span>
+                  </div>
+                  <button className="banner-clear-btn" onClick={() => {
+                    setUploadedVideoUrl(null);
+                    setUploadedVideoName(null);
+                    if (isMonitoringSignalRef.current) toggleSignalMonitoring();
+                    if (isMonitoringTripleRef.current) toggleTripleMonitoring();
+                  }}>
+                    Switch to Live Camera
+                  </button>
+                </div>
+              )}
+
               <div className="video-card">
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
                   muted
-                  style={{ transform: facingMode === "user" ? 'scaleX(-1)' : 'none' }}
+                  style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
                 />
                 <canvas ref={canvasRef} style={{ display: 'none' }} />
                 <canvas
                   ref={overlayCanvasRef}
                   className="overlay-canvas"
-                  style={{ transform: facingMode === "user" ? 'scaleX(-1)' : 'none' }}
+                  style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
                 />
 
                 {isMonitoringSignal && (
