@@ -37,6 +37,7 @@ const App = () => {
   ]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
+  const scanningFileInputRef = useRef(null);
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -61,6 +62,22 @@ const App = () => {
     { id: 1, sender: 'Admin', text: 'Please review the latest reports.', time: '10:00 AM' },
     { id: 2, sender: 'Support', text: 'Server maintenance scheduled for tonight.', time: 'Yesterday' }
   ];
+
+  // Live Monitor Direct File Upload (JUST loads the video without any background AI/VideoDB analysis)
+  const handleFileSelectForScanning = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    console.log(`[Scanning] Loading custom video: '${file.name}' (${Math.round(file.size / 1024)} KB) for rule scanning...`);
+    const url = URL.createObjectURL(file);
+    setUploadedVideoUrl(url);
+    setUploadedVideoName(file.name);
+    setRawVideoFile(file);
+    setActiveTab("live");
+
+    // Reset uploading states to ensure clean environment
+    setIsUploading(false);
+  };
 
   // Chatbot File Upload Logic
   const handleFileUpload = async (event) => {
@@ -837,7 +854,7 @@ const App = () => {
 
         <div className="live-container" style={{ display: activeTab === 'live' ? 'grid' : 'none' }}>
             <div className="live-left">
-              {uploadedVideoUrl && (
+              {uploadedVideoUrl ? (
                 <div className="uploaded-video-banner">
                   <div className="banner-info">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 7 16 12 23 17 23 7"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
@@ -853,7 +870,26 @@ const App = () => {
                     Switch to Live Camera
                   </button>
                 </div>
+              ) : (
+                <div 
+                  className="uploaded-video-banner" 
+                  style={{ background: 'rgba(0, 240, 255, 0.04)', border: '1.5px dashed rgba(0, 240, 255, 0.25)', cursor: 'pointer' }}
+                  onClick={() => scanningFileInputRef.current.click()}
+                >
+                  <div className="banner-info" style={{ color: 'var(--teal)' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    <span><strong>Upload Video:</strong> Click to load a custom traffic video for AI rule scanning</span>
+                  </div>
+                </div>
               )}
+
+              <input 
+                type="file" 
+                accept="video/*" 
+                style={{ display: 'none' }} 
+                ref={scanningFileInputRef}
+                onChange={handleFileSelectForScanning} 
+              />
 
               <div className="video-card">
                 <video
