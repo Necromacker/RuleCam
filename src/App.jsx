@@ -9,7 +9,9 @@ const App = () => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const overlayCanvasRef = useRef(null);
-  const intervalRef = useRef(null);
+  const isMonitoringSignalRef = useRef(false);
+  const isMonitoringTripleRef = useRef(false);
+  const loopTimeoutRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState("live");
   const [facingMode, setFacingMode] = useState("environment");
@@ -181,6 +183,11 @@ const App = () => {
       if (videoRef.current && videoRef.current.srcObject) {
         videoRef.current.srcObject.getTracks().forEach(t => t.stop());
       }
+      isMonitoringSignalRef.current = false;
+      isMonitoringTripleRef.current = false;
+      if (loopTimeoutRef.current) {
+        clearTimeout(loopTimeoutRef.current);
+      }
     };
   }, [startVideo]);
 
@@ -243,10 +250,10 @@ const App = () => {
 
   // Capture and Detect Signal Jumping
   const captureAndDetectSignal = useCallback(async () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current) return 0;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (video.readyState < 2) return;
+    if (video.readyState < 2) return 0;
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
@@ -255,30 +262,36 @@ const App = () => {
     const imageData = canvas.toDataURL('image/jpeg', 0.5);
 
     try {
+      console.log("[Signal Monitoring] Sending frame to backend...");
       const res = await fetch(`${BACKEND_URL}/detect_signal`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: imageData }),
       });
-      if (!res.ok) throw new Error('Detection failed');
+      if (!res.ok) throw new Error(`Detection failed with status: ${res.status}`);
       const data = await res.json();
+      const elapsed = performance.now() - startTime;
+      const currentFps = Math.round(1000 / elapsed);
+      console.log(`[Signal Monitoring] Received response in ${Math.round(elapsed)}ms (${currentFps} FPS):`, data);
+
       setDetections(data.detections || []);
       setIsViolationFound(data.violation_detected || false);
       setLightState(data.traffic_light_state || "unknown");
-      const elapsed = performance.now() - startTime;
-      setFps(Math.round(1000 / elapsed));
+      setFps(currentFps);
       drawOverlay(data.detections || [], data.image_shape, data.violation_detected, data.traffic_light_state);
+      return elapsed;
     } catch (err) {
-      console.error("Signal detection error:", err);
+      console.error("[Signal Monitoring] Error:", err);
+      return 0;
     }
   }, [drawOverlay]);
 
   // Capture and Detect Triple Riding
   const captureAndDetectTriple = useCallback(async () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current) return 0;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (video.readyState < 2) return;
+    if (video.readyState < 2) return 0;
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
@@ -287,23 +300,47 @@ const App = () => {
     const imageData = canvas.toDataURL('image/jpeg', 0.5);
 
     try {
+      console.log("[Triple Monitoring] Sending frame to backend...");
       const res = await fetch(`${BACKEND_URL}/detect_triple`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: imageData }),
       });
-      if (!res.ok) throw new Error('Detection failed');
+      if (!res.ok) throw new Error(`Detection failed with status: ${res.status}`);
       const data = await res.json();
+      const elapsed = performance.now() - startTime;
+      const currentFps = Math.round(1000 / elapsed);
+      console.log(`[Triple Monitoring] Received response in ${Math.round(elapsed)}ms (${currentFps} FPS):`, data);
+
       setDetections(data.detections || []);
       setIsViolationFound(data.violation_detected || false);
       setLightState("N/A");
-      const elapsed = performance.now() - startTime;
-      setFps(Math.round(1000 / elapsed));
+      setFps(currentFps);
       drawOverlay(data.detections || [], data.image_shape, data.violation_detected, "N/A");
+      return elapsed;
     } catch (err) {
-      console.error("Triple detection error:", err);
+      console.error("[Triple Monitoring] Error:", err);
+      return 0;
     }
   }, [drawOverlay]);
+
+  const captureAndDetectSignalLoop = useCallback(async () => {
+    if (!isMonitoringSignalRef.current) return;
+    const elapsed = await captureAndDetectSignal();
+    if (isMonitoringSignalRef.current) {
+      const nextDelay = Math.max(100, 1000 - elapsed);
+      loopTimeoutRef.current = setTimeout(captureAndDetectSignalLoop, nextDelay);
+    }
+  }, [captureAndDetectSignal]);
+
+  const captureAndDetectTripleLoop = useCallback(async () => {
+    if (!isMonitoringTripleRef.current) return;
+    const elapsed = await captureAndDetectTriple();
+    if (isMonitoringTripleRef.current) {
+      const nextDelay = Math.max(100, 1000 - elapsed);
+      loopTimeoutRef.current = setTimeout(captureAndDetectTripleLoop, nextDelay);
+    }
+  }, [captureAndDetectTriple]);
 
   // Start recording a clip
   const startRecording = useCallback(() => {
@@ -435,34 +472,46 @@ const App = () => {
   };
 
   const toggleSignalMonitoring = () => {
-    if (isMonitoringSignal) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    if (isMonitoringSignalRef.current) {
+      isMonitoringSignalRef.current = false;
       setIsMonitoringSignal(false);
+      if (loopTimeoutRef.current) {
+        clearTimeout(loopTimeoutRef.current);
+        loopTimeoutRef.current = null;
+      }
       setDetections([]);
       setFps(0);
       setIsViolationFound(false);
     } else {
-      if (isMonitoringTriple) toggleTripleMonitoring();
+      if (isMonitoringTripleRef.current) {
+        isMonitoringTripleRef.current = false;
+        setIsMonitoringTriple(false);
+      }
+      isMonitoringSignalRef.current = true;
       setIsMonitoringSignal(true);
-      captureAndDetectSignal();
-      intervalRef.current = setInterval(captureAndDetectSignal, 150);
+      captureAndDetectSignalLoop();
     }
   };
 
   const toggleTripleMonitoring = () => {
-    if (isMonitoringTriple) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    if (isMonitoringTripleRef.current) {
+      isMonitoringTripleRef.current = false;
       setIsMonitoringTriple(false);
+      if (loopTimeoutRef.current) {
+        clearTimeout(loopTimeoutRef.current);
+        loopTimeoutRef.current = null;
+      }
       setDetections([]);
       setFps(0);
       setIsViolationFound(false);
     } else {
-      if (isMonitoringSignal) toggleSignalMonitoring();
+      if (isMonitoringSignalRef.current) {
+        isMonitoringSignalRef.current = false;
+        setIsMonitoringSignal(false);
+      }
+      isMonitoringTripleRef.current = true;
       setIsMonitoringTriple(true);
-      captureAndDetectTriple();
-      intervalRef.current = setInterval(captureAndDetectTriple, 150);
+      captureAndDetectTripleLoop();
     }
   };
 
