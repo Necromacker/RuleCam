@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Form
+from pydantic import BaseModel
 import cv2
 import numpy as np
 from ultralytics import YOLO
@@ -152,6 +153,140 @@ async def analyze(video: UploadFile = File(...), v_type: str = Form("General Vio
         
     os.remove(temp_path)
     return {"status": "success", "clips": encoded_clips}
+
+class DetectRequest(BaseModel):
+    image: str
+
+@app.post("/detect_signal")
+async def detect_signal(req: DetectRequest):
+    try:
+        img_data = req.image
+        if img_data.startswith("data:image"):
+            img_data = img_data.split(",")[1]
+            
+        img_bytes = base64.b64decode(img_data)
+        np_arr = np.frombuffer(img_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return {"error": "Failed to decode image"}
+        h, w = frame.shape[:2]
+        
+        results = model(frame, imgsz=320, verbose=False)
+        
+        detections = []
+        light_state = "unknown"
+        light_y = 0.8
+        
+        for r in results:
+            for box in r.boxes:
+                cls_name = model.names[int(box.cls[0])]
+                bx1, by1, bx2, by2 = map(int, box.xyxy[0].tolist())
+                conf = float(box.conf[0])
+                
+                if cls_name == "traffic light":
+                    light_y = by2 / h
+                    if by2 > by1 and bx2 > bx1:
+                        crop = frame[by1:by2, bx1:bx2]
+                        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+                        r_m = cv2.inRange(hsv, np.array([0, 70, 50]), np.array([10, 255, 255]))
+                        y_m = cv2.inRange(hsv, np.array([15, 150, 150]), np.array([35, 255, 255]))
+                        g_m = cv2.inRange(hsv, np.array([40, 50, 50]), np.array([90, 255, 255]))
+                        r_sum, y_sum, g_sum = np.sum(r_m), np.sum(y_m), np.sum(g_m)
+                        if r_sum > 500 and r_sum > y_sum and r_sum > g_sum:
+                            light_state = "red"
+                        elif y_sum > 200 and y_sum > r_sum and y_sum > g_sum:
+                            light_state = "yellow"
+                        elif g_sum > 500 and g_sum > r_sum and g_sum > y_sum:
+                            light_state = "green"
+                            
+                detections.append({
+                    "object": cls_name,
+                    "confidence": conf,
+                    "bbox": [bx1, by1, bx2, by2],
+                    "is_violating": False
+                })
+        
+        v_found = False
+        if light_state == "red":
+            for d in detections:
+                if d["object"] in ["car", "motorcycle", "bus", "truck"]:
+                    if (d["bbox"][3] / h) > light_y:
+                        d["is_violating"] = True
+                        v_found = True
+                        
+        return {
+            "detections": detections,
+            "violation_detected": v_found,
+            "traffic_light_state": light_state,
+            "image_shape": [h, w]
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/detect_triple")
+async def detect_triple(req: DetectRequest):
+    try:
+        img_data = req.image
+        if img_data.startswith("data:image"):
+            img_data = img_data.split(",")[1]
+            
+        img_bytes = base64.b64decode(img_data)
+        np_arr = np.frombuffer(img_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return {"error": "Failed to decode image"}
+        h, w = frame.shape[:2]
+        
+        results = model(frame, imgsz=320, verbose=False)
+        
+        detections = []
+        persons = []
+        motorcycles = []
+        
+        for r in results:
+            for box in r.boxes:
+                cls_name = model.names[int(box.cls[0])]
+                bx1, by1, bx2, by2 = map(int, box.xyxy[0].tolist())
+                conf = float(box.conf[0])
+                
+                det = {
+                    "object": cls_name,
+                    "confidence": conf,
+                    "bbox": [bx1, by1, bx2, by2],
+                    "is_violating": False
+                }
+                detections.append(det)
+                
+                if cls_name == "person":
+                    persons.append(det)
+                elif cls_name == "motorcycle":
+                    motorcycles.append({"det": det, "count": 0})
+                    
+        v_found = False
+        for p in persons:
+            px1, py1, px2, py2 = p["bbox"]
+            p_area = (px2 - px1) * (py2 - py1)
+            if p_area <= 0: continue
+            for i, m in enumerate(motorcycles):
+                bx1, by1, bx2, by2 = m["det"]["bbox"]
+                ix1, iy1 = max(px1, bx1), max(py1, by1)
+                ix2, iy2 = min(px2, bx2), min(py2, by2)
+                if ix1 < ix2 and iy1 < iy2:
+                    if ((ix2 - ix1) * (iy2 - iy1)) / p_area > 0.4:
+                        motorcycles[i]["count"] += 1
+                        
+        for m in motorcycles:
+            if m["count"] >= 3:
+                m["det"]["is_violating"] = True
+                v_found = True
+                
+        return {
+            "detections": detections,
+            "violation_detected": v_found,
+            "image_shape": [h, w]
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/")
 def root():
