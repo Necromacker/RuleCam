@@ -616,9 +616,9 @@ const App = () => {
       // 3. Start the frame capture analysis loop
       captureAndDetectSignalLoop();
 
-      // 4. Force video to play smoothly at 5.0x speed for high-speed scanning
+      // 4. Force video to play smoothly at 1.0x (normal) speed for scanning
       if (videoRef.current) {
-        videoRef.current.playbackRate = 5.0; // Play 5x faster to finish a 15 min video in 3 mins smoothly!
+        videoRef.current.playbackRate = 1.0; // Play at normal 1x speed as requested!
         videoRef.current.currentTime = 0;
         videoRef.current.play().catch(err => console.log("[Auto-Start] Smooth video play error:", err));
       }
