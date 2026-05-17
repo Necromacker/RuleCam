@@ -44,6 +44,13 @@ const App = () => {
   
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState(null);
   const [uploadedVideoName, setUploadedVideoName] = useState(null);
+  const [rawVideoFile, setRawVideoFile] = useState(null);
+  const [scannedFrames, setScannedFrames] = useState([]);
+  const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
+  const [isScanningVideo, setIsScanningVideo] = useState(false);
+  const [isPlayingScannedFrames, setIsPlayingScannedFrames] = useState(false);
+  const [activeScanType, setActiveScanType] = useState(null);
+
   
   // Specific Video Chat States
   const [videoChats, setVideoChats] = useState({});
@@ -69,6 +76,11 @@ const App = () => {
     const url = URL.createObjectURL(file);
     setUploadedVideoUrl(url);
     setUploadedVideoName(file.name);
+    setRawVideoFile(file);
+    setScannedFrames([]);
+    setIsPlayingScannedFrames(false);
+    setCurrentFrameIndex(0);
+    setActiveScanType(null);
     setActiveTab("live");
 
     setChatMessages(prev => [...prev, { sender: 'user', text: `Uploaded: ${file.name}` }]);
@@ -502,7 +514,87 @@ const App = () => {
     }
   };
 
+  // Handle pre-scanned frames playback loop
+  useEffect(() => {
+    let interval = null;
+    if (isPlayingScannedFrames && scannedFrames.length > 0) {
+      interval = setInterval(() => {
+        setCurrentFrameIndex(prev => (prev + 1) % scannedFrames.length);
+      }, 200); // 5 FPS (200ms per frame)
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isPlayingScannedFrames, scannedFrames]);
+
+  const handleVideoScan = async (scanType) => {
+    if (!rawVideoFile) return;
+    
+    // Stop any active live camera tracking loops
+    if (isMonitoringSignalRef.current) {
+      isMonitoringSignalRef.current = false;
+      setIsMonitoringSignal(false);
+    }
+    if (isMonitoringTripleRef.current) {
+      isMonitoringTripleRef.current = false;
+      setIsMonitoringTriple(false);
+    }
+    if (loopTimeoutRef.current) {
+      clearTimeout(loopTimeoutRef.current);
+      loopTimeoutRef.current = null;
+    }
+
+    setIsScanningVideo(true);
+    setScannedFrames([]);
+    setCurrentFrameIndex(0);
+    setIsPlayingScannedFrames(false);
+    setActiveScanType(scanType);
+
+    const formData = new FormData();
+    formData.append("video", rawVideoFile);
+    formData.append("type", scanType);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/scan_uploaded_video`, {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success" && data.frames) {
+        setScannedFrames(data.frames);
+        setIsPlayingScannedFrames(true);
+        // Alert if violation was found in any frame
+        const hasViolation = data.frames.some(f => f.violation_detected);
+        if (hasViolation) {
+          setIsViolationFound(true);
+          setTimeout(() => setIsViolationFound(false), 5000);
+        }
+      } else {
+        alert(data.error || "Failed to scan video");
+      }
+    } catch (err) {
+      console.error("Error scanning video:", err);
+      alert("Error scanning video with YOLO backend.");
+    } finally {
+      setIsScanningVideo(false);
+    }
+  };
+
   const toggleSignalMonitoring = () => {
+    if (uploadedVideoUrl) {
+      if (isScanningVideo) return;
+      if (isPlayingScannedFrames) {
+        setIsPlayingScannedFrames(false);
+      } else {
+        if (scannedFrames.length > 0 && activeScanType === "signal") {
+          setIsPlayingScannedFrames(true);
+        } else {
+          handleVideoScan("signal");
+        }
+      }
+      return;
+    }
+
     if (isMonitoringSignalRef.current) {
       isMonitoringSignalRef.current = false;
       setIsMonitoringSignal(false);
@@ -525,6 +617,20 @@ const App = () => {
   };
 
   const toggleTripleMonitoring = () => {
+    if (uploadedVideoUrl) {
+      if (isScanningVideo) return;
+      if (isPlayingScannedFrames) {
+        setIsPlayingScannedFrames(false);
+      } else {
+        if (scannedFrames.length > 0 && activeScanType === "triple") {
+          setIsPlayingScannedFrames(true);
+        } else {
+          handleVideoScan("triple");
+        }
+      }
+      return;
+    }
+
     if (isMonitoringTripleRef.current) {
       isMonitoringTripleRef.current = false;
       setIsMonitoringTriple(false);
@@ -670,8 +776,15 @@ const App = () => {
                   Download Demo Video
                 </a>
               </div>
-              <div className="hero-visual">
-                <video src="/system_demo.mp4" autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div className="hero-visual placeholder-visual">
+                <div className="grid-overlay"></div>
+                <div className="scanner-line"></div>
+                <div className="placeholder-content">
+                  <div className="placeholder-radar"></div>
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" strokeWidth="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                  <h3>AI Engine Active</h3>
+                  <p>Upload video files or stream live feeds to scan traffic rules.</p>
+                </div>
               </div>
             </div>
 
@@ -790,6 +903,11 @@ const App = () => {
                   <button className="banner-clear-btn" onClick={() => {
                     setUploadedVideoUrl(null);
                     setUploadedVideoName(null);
+                    setRawVideoFile(null);
+                    setScannedFrames([]);
+                    setCurrentFrameIndex(0);
+                    setIsPlayingScannedFrames(false);
+                    setActiveScanType(null);
                     if (isMonitoringSignalRef.current) toggleSignalMonitoring();
                     if (isMonitoringTripleRef.current) toggleTripleMonitoring();
                   }}>
@@ -799,19 +917,39 @@ const App = () => {
               )}
 
               <div className="video-card">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
-                />
-                <canvas ref={canvasRef} style={{ display: 'none' }} />
-                <canvas
-                  ref={overlayCanvasRef}
-                  className="overlay-canvas"
-                  style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
-                />
+                {scannedFrames.length > 0 ? (
+                  <div className="scanned-player-wrapper" style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <img
+                      src={scannedFrames[currentFrameIndex].image}
+                      alt="YOLO Scanned Frame"
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
+                    />
+                    {isPlayingScannedFrames && <div className="scanning-laser-line"></div>}
+                  </div>
+                ) : isScanningVideo ? (
+                  <div className="scanning-loader-container">
+                    <div className="spinner-loader"></div>
+                    <div className="scanner-line"></div>
+                    <h3>AI Frame Scanner Active</h3>
+                    <p>YOLOv8 is parsing the video frame-by-frame and drawing bounding boxes...</p>
+                  </div>
+                ) : (
+                  <>
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
+                    />
+                    <canvas ref={canvasRef} style={{ display: 'none' }} />
+                    <canvas
+                      ref={overlayCanvasRef}
+                      className="overlay-canvas"
+                      style={{ transform: (facingMode === "user" && !uploadedVideoUrl) ? 'scaleX(-1)' : 'none' }}
+                    />
+                  </>
+                )}
 
                 {isMonitoringSignal && (
                   <div className="light-indicator">
@@ -819,9 +957,15 @@ const App = () => {
                   </div>
                 )}
 
-                {(isMonitoringSignal || isMonitoringTriple) && (
+                {scannedFrames.length > 0 && scannedFrames[currentFrameIndex].traffic_light_state !== "N/A" && (
+                  <div className="light-indicator">
+                    {scannedFrames[currentFrameIndex].traffic_light_state.toUpperCase()} SIGNAL
+                  </div>
+                )}
+
+                {(isMonitoringSignal || isMonitoringTriple || isScanningVideo || isPlayingScannedFrames) && (
                   <div className="stats-overlay">
-                    FPS {fps}
+                    {isScanningVideo ? "SCANNING" : (isPlayingScannedFrames ? "PLAYING" : `FPS ${fps || 5}`)}
                   </div>
                 )}
 
@@ -832,19 +976,58 @@ const App = () => {
                 )}
               </div>
 
+              {scannedFrames.length > 0 && (
+                <div className="frame-scrubber-container">
+                  <div className="scrubber-controls">
+                    <button 
+                      className="scrubber-btn" 
+                      onClick={() => setIsPlayingScannedFrames(prev => !prev)}
+                    >
+                      {isPlayingScannedFrames ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="4" height="16"></rect><rect x="16" y="4" width="4" height="16"></rect></svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                      )}
+                    </button>
+                    <span className="frame-count-label">
+                      Frame {currentFrameIndex + 1} / {scannedFrames.length}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={scannedFrames.length - 1}
+                    value={currentFrameIndex}
+                    onChange={(e) => {
+                      setIsPlayingScannedFrames(false); // Pause playing when scrubbing manually
+                      setCurrentFrameIndex(parseInt(e.target.value));
+                    }}
+                    className="neobrutalist-slider"
+                  />
+                </div>
+              )}
+
               <div className="action-buttons">
                 <div className="action-row">
                   <button
-                    className={`card-btn ${isMonitoringSignal ? 'active' : ''}`}
+                    className={`card-btn ${isMonitoringSignal || (isPlayingScannedFrames && activeScanType === 'signal') ? 'active' : ''}`}
                     onClick={toggleSignalMonitoring}
+                    disabled={isScanningVideo}
                   >
-                    {isMonitoringSignal ? 'Stop Signal' : 'Start Signal'}
+                    {uploadedVideoUrl 
+                      ? (isScanningVideo ? 'Scanning...' : (isPlayingScannedFrames && activeScanType === 'signal' ? 'Pause Scan' : 'Scan Signal Violations'))
+                      : (isMonitoringSignal ? 'Stop Signal' : 'Start Signal')
+                    }
                   </button>
                   <button
-                    className={`card-btn ${isMonitoringTriple ? 'active' : ''}`}
+                    className={`card-btn ${isMonitoringTriple || (isPlayingScannedFrames && activeScanType === 'triple') ? 'active' : ''}`}
                     onClick={toggleTripleMonitoring}
+                    disabled={isScanningVideo}
                   >
-                    {isMonitoringTriple ? 'Stop Triple' : 'Start Triple'}
+                    {uploadedVideoUrl
+                      ? (isScanningVideo ? 'Scanning...' : (isPlayingScannedFrames && activeScanType === 'triple' ? 'Pause Scan' : 'Scan Triple Riding'))
+                      : (isMonitoringTriple ? 'Stop Triple' : 'Start Triple')
+                    }
                   </button>
                 </div>
               </div>

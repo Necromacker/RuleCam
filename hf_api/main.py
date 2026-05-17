@@ -288,6 +288,135 @@ async def detect_triple(req: DetectRequest):
     except Exception as e:
         return {"error": str(e)}
 
+
+@app.post("/scan_video")
+async def scan_video(video: UploadFile = File(...), type: str = Form("signal")):
+    temp_path = f"temp_scan_{video.filename}"
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(video.file, buffer)
+        
+    try:
+        cap = cv2.VideoCapture(temp_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0: fps = 30
+        
+        sample_rate = max(1, int(fps / 5)) # 5 FPS
+        frames_data = []
+        frame_count = 0
+        
+        while True:
+            ret, frame = cap.read()
+            if not ret: break
+            
+            if frame_count % sample_rate == 0:
+                h, w = frame.shape[:2]
+                results = model(frame, imgsz=320, verbose=False)
+                
+                detections = []
+                light_state = "unknown"
+                light_y = 0.8
+                persons = []
+                motorcycles = []
+                
+                for r in results:
+                    for box in r.boxes:
+                        cls_name = model.names[int(box.cls[0])]
+                        bx1, by1, bx2, by2 = map(int, box.xyxy[0].tolist())
+                        conf = float(box.conf[0])
+                        
+                        if cls_name == "traffic light":
+                            light_y = by2 / h
+                            if by2 > by1 and bx2 > bx1:
+                                crop = frame[by1:by2, bx1:bx2]
+                                hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+                                r_m = cv2.inRange(hsv, np.array([0, 70, 50]), np.array([10, 255, 255]))
+                                y_m = cv2.inRange(hsv, np.array([15, 150, 150]), np.array([35, 255, 255]))
+                                g_m = cv2.inRange(hsv, np.array([40, 50, 50]), np.array([90, 255, 255]))
+                                r_sum, y_sum, g_sum = np.sum(r_m), np.sum(y_m), np.sum(g_m)
+                                if r_sum > 500 and r_sum > y_sum and r_sum > g_sum:
+                                    light_state = "red"
+                                elif y_sum > 200 and y_sum > r_sum and y_sum > g_sum:
+                                    light_state = "yellow"
+                                elif g_sum > 500 and g_sum > r_sum and g_sum > y_sum:
+                                    light_state = "green"
+                                    
+                        detections.append({
+                            "object": cls_name,
+                            "confidence": conf,
+                            "bbox": [bx1, by1, bx2, by2],
+                            "is_violating": False
+                        })
+                        
+                        if cls_name == "person":
+                            persons.append(detections[-1])
+                        elif cls_name == "motorcycle":
+                            motorcycles.append({"det": detections[-1], "count": 0})
+                            
+                violation_detected = False
+                if type == "signal":
+                    if light_state == "red":
+                        for d in detections:
+                            if d["object"] in ["car", "motorcycle", "bus", "truck"]:
+                                if (d["bbox"][3] / h) > light_y:
+                                    d["is_violating"] = True
+                                    violation_detected = True
+                elif type == "triple":
+                    for p in persons:
+                        px1, py1, px2, py2 = p["bbox"]
+                        p_area = (px2 - px1) * (py2 - py1)
+                        if p_area <= 0: continue
+                        for i, m in enumerate(motorcycles):
+                            bx1, by1, bx2, by2 = m["det"]["bbox"]
+                            ix1, iy1 = max(px1, bx1), max(py1, by1)
+                            ix2, iy2 = min(px2, bx2), min(py2, by2)
+                            if ix1 < ix2 and iy1 < iy2:
+                                if ((ix2 - ix1) * (iy2 - iy1)) / p_area > 0.4:
+                                    motorcycles[i]["count"] += 1
+                    for m in motorcycles:
+                        if m["count"] >= 3:
+                            m["det"]["is_violating"] = True
+                            violation_detected = True
+                            
+                draw_frame = frame.copy()
+                
+                # Light state overlay
+                if type == "signal" and light_state != "unknown":
+                    colors_map = {"red": (0, 0, 255), "yellow": (0, 255, 255), "green": (0, 255, 0)}
+                    color = colors_map.get(light_state, (255, 255, 0))
+                    cv2.circle(draw_frame, (30, 30), 10, color, -1)
+                    cv2.putText(draw_frame, f"SIGNAL: {light_state.upper()}", (50, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                    
+                for d in detections:
+                    bx1, by1, bx2, by2 = d["bbox"]
+                    color = (0, 0, 255) if d["is_violating"] else (255, 255, 0)
+                    thickness = 3 if d["is_violating"] else 2
+                    cv2.rectangle(draw_frame, (bx1, by1), (bx2, by2), color, thickness)
+                    label = d["object"]
+                    if d["is_violating"]:
+                        label += " (VIOLATION)"
+                    cv2.putText(draw_frame, label, (bx1, by1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                    
+                _, buffer_img = cv2.imencode('.jpg', draw_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                img_base64 = base64.b64encode(buffer_img).decode('utf-8')
+                
+                frames_data.append({
+                    "image": f"data:image/jpeg;base64,{img_base64}",
+                    "violation_detected": violation_detected,
+                    "traffic_light_state": light_state if type == "signal" else "N/A"
+                })
+                
+            frame_count += 1
+            
+        cap.release()
+        os.remove(temp_path)
+        return {"status": "success", "frames": frames_data}
+        
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        return {"error": str(e)}
+
+
 @app.get("/")
 def root():
     return {"message": "RuleCam YOLO Inference API is running."}
