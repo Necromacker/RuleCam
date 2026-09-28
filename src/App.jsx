@@ -1,10 +1,69 @@
 import * as React from 'react';
 import './App.css';
 import rulecamDemoVideo from './assets/Rulecam_demo.mp4';
+import Hls from 'hls.js';
 const { useEffect, useRef, useState, useCallback } = React;
 
 const rawBackendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5005";
 const BACKEND_URL = rawBackendUrl.replace(/\/$/, "");
+
+const HlsVideoPlayer = ({ src, className, controls = true }) => {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !src) return;
+
+    let hls = null;
+    const isM3u8 = typeof src === 'string' && src.includes('.m3u8');
+
+    if (isM3u8) {
+      if (Hls.isSupported()) {
+        hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+        });
+        hls.loadSource(src);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                hls.recoverMediaError();
+                break;
+              default:
+                hls.destroy();
+                break;
+            }
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = src;
+      }
+    } else {
+      video.src = src;
+    }
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+    };
+  }, [src]);
+
+  return (
+    <video
+      ref={videoRef}
+      className={className}
+      controls={controls}
+      playsInline
+      preload="metadata"
+    />
+  );
+};
 
 const App = () => {
   const videoRef = useRef(null);
@@ -1113,9 +1172,13 @@ const App = () => {
                       </div>
 
                       {v.videodb_url ? (
-                        <iframe src={v.videodb_url} className="media-preview" title="VideoDB Stream" frameBorder="0" allowFullScreen></iframe>
+                        v.videodb_url.includes('.m3u8') ? (
+                          <HlsVideoPlayer src={v.videodb_url} className="media-preview" controls />
+                        ) : (
+                          <iframe src={v.videodb_url} className="media-preview" title="VideoDB Stream" frameBorder="0" allowFullScreen></iframe>
+                        )
                       ) : isVideo && mediaUrl ? (
-                        <video src={mediaUrl} className="media-preview" controls></video>
+                        <video src={mediaUrl} className="media-preview" controls playsInline></video>
                       ) : mediaUrl ? (
                         <img src={mediaUrl} alt="Violation" className="media-preview" />
                       ) : (

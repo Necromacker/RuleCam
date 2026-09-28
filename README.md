@@ -57,7 +57,6 @@ When a submitted video leads to a verified traffic violation and a subsequent fi
 ## ⚙️ Getting Started
 
 ### 1. Environment Configuration
-
 Create a `.env` file in the **backend** directory:
 ```env
 VIDEODB_API_KEY=your_videodb_api_key
@@ -69,7 +68,7 @@ Create a `.env` file in the **root** directory:
 VITE_BACKEND_URL=http://localhost:5005
 ```
 
-### 2. Backend Installation
+### 2. Backend Installation 
 
 ```bash
 cd backend
