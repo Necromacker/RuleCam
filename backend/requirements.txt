@@ -5,5 +5,5 @@ videodb
 python-dotenv
 gunicorn
 ultralytics
-opencv-python
+opencv-python-headless
 numpy
